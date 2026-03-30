@@ -1,0 +1,71 @@
+#pragma once
+
+#include <ftxui/component/component.hpp>
+
+#include <functional>
+#include <memory>
+#include <string>
+
+#include "monitostr/model/log_buffer.hpp"
+#include "monitostr/model/relay_stats.hpp"
+
+namespace monitostr::ui {
+
+class App {
+ public:
+  struct HeaderContext {
+    std::string npub;
+    std::string hex_pubkey;
+  };
+
+  using NpubSubmit = std::function<void(std::string npub)>;
+  using NsecSubmit = std::function<void(std::string nsec)>;
+
+  App(std::shared_ptr<monitostr::model::RelayStats> shared_stats,
+      std::shared_ptr<monitostr::model::LogBuffer> log_buffer, NpubSubmit on_submit, NsecSubmit on_auth = nullptr);
+
+  void SetHeaderContext(HeaderContext context);
+  void Run();
+
+ private:
+  enum class UiMode {
+    kNormal,
+    kInsert,
+    kSearch,
+    kCommand,
+  };
+
+  enum class ActivePane {
+    kRelays,
+    kLogs,
+  };
+
+  enum class CompactMode {
+    kAuto,
+    kForceCompact,
+    kForceWide,
+  };
+
+  ftxui::Component BuildComponentTree();
+
+  HeaderContext header_context_;
+  std::shared_ptr<monitostr::model::RelayStats> shared_stats_;
+  std::shared_ptr<monitostr::model::LogBuffer> log_buffer_;
+  NpubSubmit on_submit_;
+  NsecSubmit on_auth_;
+  std::string input_npub_;
+  UiMode mode_ = UiMode::kNormal;
+  ActivePane active_pane_ = ActivePane::kRelays;
+  std::size_t selected_relay_ = 0;
+  std::size_t logs_scroll_lines_ = 0;
+  bool logs_follow_ = true;
+  bool pending_g_ = false;
+  std::string logs_search_query_;
+  std::size_t logs_search_hit_ordinal_ = 0;
+  std::string command_line_;
+  std::function<void()> request_exit_;
+  bool nips_wrap_selected_row_ = true;
+  CompactMode compact_mode_ = CompactMode::kAuto;
+};
+
+}  // namespace monitostr::ui

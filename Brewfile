@@ -1,0 +1,7 @@
+brew "boost"
+brew "catch2"
+brew "ftxui"
+brew "nlohmann-json"
+brew "openssl@3"
+brew "pre-commit"
+brew "secp256k1"

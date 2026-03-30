@@ -1,0 +1,31 @@
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-json
+      - id: check-merge-conflict
+      - id: mixed-line-ending
+        args: [--fix=lf]
+
+  - repo: https://github.com/pre-commit/mirrors-clang-format
+    rev: v22.1.2
+    hooks:
+      - id: clang-format
+        types_or: [c++, c]
+
+  - repo: https://github.com/pocc/pre-commit-hooks
+    rev: v1.3.5
+    hooks:
+      - id: cppcheck
+        files: ^(src|include)/.*\.(cpp|cc|cxx|hpp|h)$
+        args:
+          - --std=c++20
+          - --enable=warning,performance,portability
+          - --suppress=missingIncludeSystem
+          - --inline-suppr
+          - --error-exitcode=1
+          - -Iinclude
+          - -Isrc

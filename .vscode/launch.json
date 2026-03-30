@@ -1,0 +1,15 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Debug monitostr",
+      "type": "lldb-dap",
+      "request": "launch",
+      "program": "${workspaceFolder}/build/monitostr",
+      "args": [],
+      "cwd": "${workspaceFolder}",
+      "preLaunchTask": "CMake: Build (Debug)",
+      "terminal": "integrated"
+    }
+  ]
+}
