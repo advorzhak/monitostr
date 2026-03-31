@@ -19,9 +19,11 @@ Primary targets:
 Requirements:
 
 - Update README.md when commands, keybindings, input flows, authentication behavior, or visible UI behavior changed.
+- Update README.md when relay configuration rules change, including query-parameter relay URLs or paid-relay caveats.
 - Keep documentation concise and behaviorally accurate; do not describe features that are not implemented.
 - Preserve project architecture boundaries and existing terminology.
 - Update or add prompt files only when they improve a repeatable maintenance workflow.
+- If network behavior changed, keep `.github/copilot-instructions.md` conventions aligned with the implementation.
 - If code behavior is unclear, inspect the implementation before editing docs.
 - Summarize the documentation changes with file references.
 

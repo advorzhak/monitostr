@@ -23,10 +23,13 @@
 - Add tests for pure logic or deterministic behavior when changing decoding, state models, or orchestration.
 - Keep macOS-specific behavior explicit (for example clipboard integration with pbcopy).
 - For relay failures, include phase labels (resolve, connect, tls_handshake, ws_handshake, read, write) in logs.
+- Preserve full relay URLs, including query parameters, when parsing, logging, storing, or reconnecting to relay targets.
+- When changing WebSocket connection behavior in `src/net`, keep bootstrap and session handshake headers aligned so discovery and monitoring do not diverge.
 
 ## Documentation
 
 - When user-facing behavior changes, update README.md in the same change.
+- Document relay URL shape changes and paid-relay caveats in README.md when they affect how users configure or debug relays.
 - Treat command names, input flows, keybindings, and mode behavior as user-facing behavior that must be documented.
 - When adding or changing agent customization files under .github/, keep their descriptions, scope, and expected output aligned with current repo behavior.
 - If a change introduces a repeatable documentation maintenance workflow, prefer a focused prompt under .github/prompts/ instead of adding broad generic instructions.

@@ -14,6 +14,7 @@ Focus on:
 
 - TLS/SNI/hostname verification failures
 - WebSocket handshake declines vs transport failures
+- Relay URL parsing issues, including dropped query parameters
 - Recoverable vs non-recoverable errors
 - Reconnect behavior and backoff quality
 
@@ -21,6 +22,7 @@ Instructions:
 
 - Identify likely root causes with confidence level.
 - Separate expected relay policy declines from true defects.
+- Check whether bootstrap and session paths send equivalent WebSocket headers and targets.
 - Propose concrete code changes with minimal risk.
 - Suggest specific tests to validate the fix.
 - If logs are insufficient, state exactly which missing log lines are needed.

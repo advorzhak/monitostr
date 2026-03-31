@@ -116,6 +116,8 @@ cmake --build build -j4
 
 - `filter.nostr.wine` requires NIP-42 auth (`AUTH` challenge after WebSocket upgrade) and active paid time.
 - `nostr.wine` and `cellar.nostr.wine` advertise payment requirements in NIP-11, but not mandatory NIP-42 for basic connection.
+- Some paid relays publish meaningful query-parameter variants such as `wss://filter.nostr.wine?global=all`; keep the full relay URL unchanged when sharing or debugging relay lists.
+- Relay URLs that include query parameters are preserved during bootstrap and monitoring connects.
 - Some relays can reject writes/subscriptions based on account status even when the socket connection succeeds.
 - Bearer-token HTTP auth is relay-specific and not a standard Nostr mechanism. This app currently implements NIP-42 challenge signing.
 

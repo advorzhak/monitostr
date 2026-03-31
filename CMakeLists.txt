@@ -16,6 +16,7 @@ add_executable(monitostr
   src/nostr/auth_key.cpp
   src/nostr/signer.cpp
   src/net/bootstrap_client.cpp
+  src/net/relay_target.cpp
   src/net/relay_session.cpp
   src/net/session_manager.cpp
   src/ui/app.cpp
@@ -46,9 +47,11 @@ if(BUILD_TESTING)
   add_executable(monitostr_tests
     tests/auth_key_test.cpp
     tests/nip19_decode_test.cpp
+    tests/relay_target_test.cpp
     tests/relay_stats_test.cpp
     src/model_relay_stats.cpp
     src/nip19/npub.cpp
+    src/net/relay_target.cpp
     src/nostr/auth_key.cpp
     src/nostr/signer.cpp
   )
@@ -73,6 +76,7 @@ if(BUILD_TESTING)
   add_executable(monitostr_integration_tests
     tests/bootstrap_client_integration_test.cpp
     src/net/bootstrap_client.cpp
+    src/net/relay_target.cpp
   )
 
   target_include_directories(monitostr_integration_tests

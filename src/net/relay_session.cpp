@@ -25,6 +25,7 @@
 #include <openssl/err.h>
 #include <openssl/ssl.h>
 
+#include "monitostr/net/relay_target.hpp"
 #include "monitostr/nostr/signer.hpp"
 
 #include <chrono>
@@ -48,14 +49,9 @@ RelaySession::ParsedRelay ParseRelay(const std::string& relay_url) {
     parsed.port = "443";
   }
 
-  const std::size_t slash = value.find('/');
-  if (slash == std::string::npos) {
-    parsed.host = value;
-    parsed.target = "/";
-  } else {
-    parsed.host = value.substr(0, slash);
-    parsed.target = value.substr(slash);
-  }
+  const RelayHostTarget host_target = SplitRelayHostAndTarget(value);
+  parsed.host = host_target.host;
+  parsed.target = host_target.target;
 
   const std::size_t colon = parsed.host.find(':');
   if (colon != std::string::npos) {
@@ -181,6 +177,10 @@ void RelaySession::OnTlsHandshake(const boost::system::error_code& ec) {
     log_buffer_->Info("[" + relay_url_ + "] TLS handshake OK, starting WebSocket handshake");
   }
   shared_stats_->SetStatus(relay_url_, monitostr::model::RelayStatus::kWsHandshake);
+  ws_.set_option(boost::beast::websocket::stream_base::decorator([](boost::beast::websocket::request_type& req) {
+    req.set(boost::beast::http::field::user_agent, "monitostr");
+    req.set("Sec-WebSocket-Protocol", "nostr");
+  }));
   ws_.async_handshake(
       parsed_relay_.host, parsed_relay_.target,
       boost::asio::bind_executor(strand_, [self = shared_from_this()](const boost::system::error_code& ws_ec) {

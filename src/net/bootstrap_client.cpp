@@ -33,6 +33,8 @@
 #include <thread>
 #include <unordered_set>
 
+#include "monitostr/net/relay_target.hpp"
+
 namespace monitostr::net {
 namespace {
 
@@ -58,14 +60,9 @@ std::optional<ParsedRelay> ParseRelayUrl(const std::string& relay_url) {
     return std::nullopt;
   }
 
-  const std::size_t slash = value.find('/');
-  if (slash == std::string::npos) {
-    parsed.host = value;
-    parsed.target = "/";
-  } else {
-    parsed.host = value.substr(0, slash);
-    parsed.target = value.substr(slash);
-  }
+  const RelayHostTarget host_target = SplitRelayHostAndTarget(value);
+  parsed.host = host_target.host;
+  parsed.target = host_target.target;
 
   const std::size_t colon = parsed.host.find(':');
   if (colon != std::string::npos) {
@@ -217,6 +214,10 @@ BootstrapResult QuerySeedRelay(const std::string& seed_relay_url, const std::str
     ws.next_layer().set_verify_mode(boost::asio::ssl::verify_peer);
     ws.next_layer().set_verify_callback(boost::asio::ssl::host_name_verification(parsed->host));
     ws.next_layer().handshake(boost::asio::ssl::stream_base::client);
+    ws.set_option(boost::beast::websocket::stream_base::decorator([](boost::beast::websocket::request_type& req) {
+      req.set("User-Agent", "monitostr");
+      req.set("Sec-WebSocket-Protocol", "nostr");
+    }));
     ws.handshake(parsed->host, parsed->target);
 
     auto relays = QueryKindWithWs(ws, hex_pubkey, 10002, "bootstrap-10002");
@@ -239,6 +240,10 @@ BootstrapResult QuerySeedRelay(const std::string& seed_relay_url, const std::str
   } else {
     boost::beast::websocket::stream<boost::beast::tcp_stream> ws(ioc);
     boost::beast::get_lowest_layer(ws).connect(endpoints);
+    ws.set_option(boost::beast::websocket::stream_base::decorator([](boost::beast::websocket::request_type& req) {
+      req.set("User-Agent", "monitostr");
+      req.set("Sec-WebSocket-Protocol", "nostr");
+    }));
     ws.handshake(parsed->host, parsed->target);
 
     auto relays = QueryKindWithWs(ws, hex_pubkey, 10002, "bootstrap-10002");
