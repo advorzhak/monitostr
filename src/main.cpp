@@ -115,7 +115,15 @@ int main() {
         auth_key = next_auth_key;
         const std::string& derived_pubkey = auth_key->hex_pubkey();
         log_buffer->Info("NIP-42 auth key set (pubkey: " + derived_pubkey.substr(0, 16) + "...)");
-        // Derive npub and start monitoring automatically.
+
+        if (session_manager.HasActiveSessions()) {
+          // Sessions already running — push the new key to them without restarting.
+          // Each session will use it on the next AUTH challenge from a relay.
+          session_manager.UpdateAuthKey(auth_key);
+          return;
+        }
+
+        // No sessions yet — derive npub and start monitoring automatically.
         const auto npub_result = monitostr::nip19::EncodeNpubFromHex(derived_pubkey);
         if (!npub_result.ok) {
           log_buffer->Error("Failed to encode npub from nsec: " + npub_result.error);

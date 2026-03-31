@@ -37,6 +37,8 @@ class SessionManager {
 
   void Start(const std::vector<std::string>& relay_urls, const std::string& hex_pubkey,
              std::shared_ptr<const monitostr::nostr::AuthKey> auth_key = nullptr);
+  void UpdateAuthKey(std::shared_ptr<const monitostr::nostr::AuthKey> auth_key);
+  bool HasActiveSessions() const;
   void StopAll();
 
  private:

@@ -41,6 +41,17 @@ void SessionManager::Start(const std::vector<std::string>& relay_urls, const std
   }
 }
 
+void SessionManager::UpdateAuthKey(std::shared_ptr<const monitostr::nostr::AuthKey> auth_key) {
+  for (const auto& session : sessions_) {
+    session->SetAuthKey(auth_key);
+  }
+  if (log_buffer_) {
+    log_buffer_->Info("NIP-42 auth key updated on " + std::to_string(sessions_.size()) + " running sessions");
+  }
+}
+
+bool SessionManager::HasActiveSessions() const { return !sessions_.empty(); }
+
 void SessionManager::StopAll() {
   if (!sessions_.empty() && log_buffer_) {
     log_buffer_->Info("Stopping " + std::to_string(sessions_.size()) + " relay sessions");
