@@ -36,7 +36,7 @@
 - This project is licensed under GNU General Public License v3.0 (GPL-3.0). See [LICENSE](LICENSE) for full text.
 - All source files (.cpp, .hpp) must include the GPL-3.0 copyright header at the top (after #pragma once for headers).
 - Copyright header format:
-  ```
+  ```cpp
   // Copyright (C) 2026 advorzhak
   //
   // This program is free software: you can redistribute it and/or modify
