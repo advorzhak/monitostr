@@ -53,6 +53,37 @@ cmake --build build -j4
 ./build/monitostr
 ```
 
+## Optional Dev Shortcuts (zsh)
+
+If you want short commands for configure/build/run/test flows, source the provided shortcuts file:
+
+```bash
+source ~/dev/advorzhak/monitostr/scripts/dev_aliases.zsh
+```
+
+Add that line to your `~/.zshrc` to load shortcuts automatically.
+
+Available shortcuts:
+
+- `mroot`: `cd` to repo root
+- `mcfg`: configure Debug build
+- `mbld`: build Debug
+- `mrun`: run Debug binary
+- `mrelcfg`: configure Release build
+- `mrelbld`: build Release
+- `mtest`: run tests from Debug build dir
+- `mtesti`: run integration tests only
+- `mclean`: remove build directories
+
+These are implemented as zsh functions (not aliases), so extra arguments are passed through, for example:
+
+- `mtest -R relay_stats`
+- `mbld --target monitostr_tests`
+
+Also included:
+
+- `with_gnu <command> [args...]`: run a command with GNU coreutils in `PATH` for that one call only
+
 ## Usage
 
 1. Launch the app.
