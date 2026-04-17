@@ -17,8 +17,12 @@ add_executable(monitostr
   src/nostr/signer.cpp
   src/net/bootstrap_client.cpp
   src/net/relay_target.cpp
+  src/net/relay_session_support.cpp
   src/net/relay_session.cpp
   src/net/session_manager.cpp
+  src/ui/command_processor.cpp
+  src/ui/navigation_controller.cpp
+  src/ui/ui_renderer.cpp
   src/ui/app.cpp
 )
 
@@ -48,12 +52,22 @@ if(BUILD_TESTING)
     tests/auth_key_test.cpp
     tests/nip19_decode_test.cpp
     tests/relay_target_test.cpp
+    tests/relay_session_support_test.cpp
     tests/relay_stats_test.cpp
+    tests/ui_command_processor_test.cpp
+    tests/ui_navigation_controller_test.cpp
+    tests/ui_renderer_test.cpp
+    tests/relay_session_lifecycle_integration_test.cpp
     src/model_relay_stats.cpp
     src/nip19/npub.cpp
     src/net/relay_target.cpp
+    src/net/relay_session_support.cpp
+    src/net/relay_session.cpp
     src/nostr/auth_key.cpp
     src/nostr/signer.cpp
+    src/ui/command_processor.cpp
+    src/ui/navigation_controller.cpp
+    src/ui/ui_renderer.cpp
   )
 
   target_include_directories(monitostr_tests
@@ -65,7 +79,12 @@ if(BUILD_TESTING)
     PRIVATE
       Catch2::Catch2WithMain
       OpenSSL::Crypto
+      OpenSSL::SSL
       secp256k1::secp256k1
+      nlohmann_json::nlohmann_json
+      ftxui::screen
+      ftxui::dom
+      ftxui::component
   )
 
   monitostr_apply_compiler_settings(monitostr_tests)

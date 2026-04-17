@@ -15,25 +15,31 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
+#include <cstddef>
+#include <cstdint>
+#include <optional>
 #include <string>
 #include <string_view>
-#include <optional>
+#include <vector>
 
 namespace monitostr::net {
 
-struct RelayHostTarget {
-  std::string host;
-  std::string target;
+struct RelayMessageEffect {
+  enum class Type {
+    kIgnore,
+    kAuthChallenge,
+    kEventCount,
+    kEndOfStoredEvents,
+  };
+
+  Type type = Type::kIgnore;
+  std::string challenge;
 };
 
-struct ParsedRelayUrl {
-  bool secure = true;
-  std::string host;
-  std::string port;
-  std::string target;
-};
-
-RelayHostTarget SplitRelayHostAndTarget(std::string_view relay);
-std::optional<ParsedRelayUrl> ParseRelayUrl(std::string_view relay_url);
+std::string BuildMonitorReqMessage(std::string_view hex_pubkey);
+RelayMessageEffect ParseRelayMessageEffect(std::string_view payload);
+bool ShouldReconnectAttempt(bool stopped, std::size_t reconnect_attempt, std::string_view where);
+std::vector<int> ParseSupportedNipsFromNip11Body(std::string_view response_body);
+unsigned ComputeReconnectDelayMs(const std::string& relay_url, std::size_t reconnect_attempt, std::uint64_t entropy);
 
 }  // namespace monitostr::net

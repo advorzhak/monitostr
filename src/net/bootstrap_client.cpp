@@ -17,6 +17,7 @@
 
 #include <boost/asio/post.hpp>
 #include <boost/asio/ssl/host_name_verification.hpp>
+#include <boost/asio/thread_pool.hpp>
 #include <boost/beast/core/buffers_to_string.hpp>
 #include <boost/beast/core/tcp_stream.hpp>
 #include <boost/beast/ssl.hpp>
@@ -27,54 +28,14 @@
 
 #include <algorithm>
 #include <chrono>
-#include <cctype>
 #include <optional>
 #include <string>
-#include <thread>
 #include <unordered_set>
 
 #include "monitostr/net/relay_target.hpp"
 
 namespace monitostr::net {
 namespace {
-
-struct ParsedRelay {
-  bool secure = true;
-  std::string host;
-  std::string port;
-  std::string target;
-};
-
-std::optional<ParsedRelay> ParseRelayUrl(const std::string& relay_url) {
-  ParsedRelay parsed;
-  std::string value = relay_url;
-  if (value.rfind("wss://", 0) == 0) {
-    parsed.secure = true;
-    parsed.port = "443";
-    value = value.substr(6);
-  } else if (value.rfind("ws://", 0) == 0) {
-    parsed.secure = false;
-    parsed.port = "80";
-    value = value.substr(5);
-  } else {
-    return std::nullopt;
-  }
-
-  const RelayHostTarget host_target = SplitRelayHostAndTarget(value);
-  parsed.host = host_target.host;
-  parsed.target = host_target.target;
-
-  const std::size_t colon = parsed.host.find(':');
-  if (colon != std::string::npos) {
-    parsed.port = parsed.host.substr(colon + 1);
-    parsed.host = parsed.host.substr(0, colon);
-  }
-
-  if (parsed.host.empty()) {
-    return std::nullopt;
-  }
-  return parsed;
-}
 
 bool IsRelayUrlLike(const std::string& value) { return value.rfind("wss://", 0) == 0 || value.rfind("ws://", 0) == 0; }
 
@@ -125,7 +86,8 @@ std::vector<std::string> Deduplicate(std::vector<std::string> values) {
   out.reserve(values.size());
   std::unordered_set<std::string> seen;
   for (auto& value : values) {
-    if (value.rfind("wss://", 0) != 0 && value.rfind("ws://", 0) != 0) {
+    const auto parsed = ParseRelayUrl(value);
+    if (!parsed.has_value()) {
       continue;
     }
     if (seen.emplace(value).second) {
@@ -136,8 +98,40 @@ std::vector<std::string> Deduplicate(std::vector<std::string> values) {
 }
 
 template <typename WsStream>
+void SetReadDeadline(WsStream& ws, std::chrono::seconds timeout) {
+  boost::beast::get_lowest_layer(ws).expires_after(timeout);
+}
+
+std::vector<std::string> FilterSupportedRelayUrls(std::vector<std::string> relay_urls,
+                                                  const std::shared_ptr<monitostr::model::LogBuffer>& log_buffer) {
+  std::vector<std::string> filtered;
+  filtered.reserve(relay_urls.size());
+
+  std::size_t insecure_count = 0;
+  for (auto& relay_url : relay_urls) {
+    const auto parsed = ParseRelayUrl(relay_url);
+    if (!parsed.has_value()) {
+      continue;
+    }
+    if (!parsed->secure) {
+      ++insecure_count;
+      continue;
+    }
+    filtered.push_back(std::move(relay_url));
+  }
+
+  if (insecure_count > 0 && log_buffer) {
+    log_buffer->Warn("Bootstrap ignored " + std::to_string(insecure_count) +
+                     " insecure ws:// relay URLs; monitostr currently monitors wss:// relays only");
+  }
+
+  return Deduplicate(std::move(filtered));
+}
+
+template <typename WsStream>
 std::vector<std::string> QueryKindWithWs(WsStream& ws, const std::string& hex_pubkey, int kind,
                                          const std::string& sub_id) {
+  constexpr auto kReadTimeout = std::chrono::seconds(8);
   const nlohmann::json filter = {
       {"authors", nlohmann::json::array({hex_pubkey})},
       {"kinds", nlohmann::json::array({kind})},
@@ -152,6 +146,7 @@ std::vector<std::string> QueryKindWithWs(WsStream& ws, const std::string& hex_pu
   const auto started = std::chrono::steady_clock::now();
 
   while (std::chrono::steady_clock::now() - started < std::chrono::seconds(8)) {
+    SetReadDeadline(ws, kReadTimeout);
     ws.read(buffer);
     const std::string payload = boost::beast::buffers_to_string(buffer.data());
     buffer.consume(buffer.size());
@@ -204,6 +199,7 @@ BootstrapResult QuerySeedRelay(const std::string& seed_relay_url, const std::str
     ssl_ctx.set_default_verify_paths();
 
     boost::beast::websocket::stream<boost::beast::ssl_stream<boost::beast::tcp_stream>> ws(ioc, ssl_ctx);
+    boost::beast::get_lowest_layer(ws).expires_after(std::chrono::seconds(8));
     boost::beast::get_lowest_layer(ws).connect(endpoints);
 
     if (!SSL_set_tlsext_host_name(ws.next_layer().native_handle(), parsed->host.c_str())) {
@@ -213,11 +209,13 @@ BootstrapResult QuerySeedRelay(const std::string& seed_relay_url, const std::str
     }
     ws.next_layer().set_verify_mode(boost::asio::ssl::verify_peer);
     ws.next_layer().set_verify_callback(boost::asio::ssl::host_name_verification(parsed->host));
+    boost::beast::get_lowest_layer(ws).expires_after(std::chrono::seconds(8));
     ws.next_layer().handshake(boost::asio::ssl::stream_base::client);
     ws.set_option(boost::beast::websocket::stream_base::decorator([](boost::beast::websocket::request_type& req) {
       req.set("User-Agent", "monitostr");
       req.set("Sec-WebSocket-Protocol", "nostr");
     }));
+    boost::beast::get_lowest_layer(ws).expires_after(std::chrono::seconds(8));
     ws.handshake(parsed->host, parsed->target);
 
     auto relays = QueryKindWithWs(ws, hex_pubkey, 10002, "bootstrap-10002");
@@ -239,11 +237,13 @@ BootstrapResult QuerySeedRelay(const std::string& seed_relay_url, const std::str
     ws.close(boost::beast::websocket::close_code::normal, close_ec);
   } else {
     boost::beast::websocket::stream<boost::beast::tcp_stream> ws(ioc);
+    boost::beast::get_lowest_layer(ws).expires_after(std::chrono::seconds(8));
     boost::beast::get_lowest_layer(ws).connect(endpoints);
     ws.set_option(boost::beast::websocket::stream_base::decorator([](boost::beast::websocket::request_type& req) {
       req.set("User-Agent", "monitostr");
       req.set("Sec-WebSocket-Protocol", "nostr");
     }));
+    boost::beast::get_lowest_layer(ws).expires_after(std::chrono::seconds(8));
     ws.handshake(parsed->host, parsed->target);
 
     auto relays = QueryKindWithWs(ws, hex_pubkey, 10002, "bootstrap-10002");
@@ -265,13 +265,15 @@ BootstrapResult QuerySeedRelay(const std::string& seed_relay_url, const std::str
     ws.close(boost::beast::websocket::close_code::normal, close_ec);
   }
 
-  result.relay_urls = Deduplicate(std::move(result.relay_urls));
+  result.relay_urls = FilterSupportedRelayUrls(std::move(result.relay_urls), log_buffer);
   if (!result.ok && result.relay_urls.empty()) {
-    result.relay_urls = Deduplicate({
-        seed_relay_url,
-        "wss://nos.lol",
-        "wss://relay.snort.social",
-    });
+    result.relay_urls = FilterSupportedRelayUrls(
+        {
+            seed_relay_url,
+            "wss://nos.lol",
+            "wss://relay.snort.social",
+        },
+        log_buffer);
     result.ok = true;
     result.source_event_kind = "fallback";
     if (log_buffer) {
@@ -298,7 +300,8 @@ void BootstrapClient::ResolveRelaysForPubkey(const std::string& hex_pubkey, Comp
     log_buffer->Info("Bootstrap starting (primary seed: " + seed_relay_url + ")");
   }
 
-  std::thread([this, hex_pubkey, seed_relay_url, completion = std::move(completion), log_buffer]() mutable {
+  boost::asio::post(worker_pool_, [this, hex_pubkey, seed_relay_url, completion = std::move(completion),
+                                   log_buffer]() mutable {
     // Build ordered candidate list: caller-supplied seed first, then well-known fallback seeds.
     const std::vector<std::string> candidates = {
         seed_relay_url,     "wss://nos.lol",          "wss://relay.nostr.band", "wss://relay.snort.social",
@@ -340,7 +343,7 @@ void BootstrapClient::ResolveRelaysForPubkey(const std::string& hex_pubkey, Comp
     boost::asio::post(io_context_, [completion = std::move(completion), result = std::move(result)]() mutable {
       completion(std::move(result));
     });
-  }).detach();
+  });
 }
 
 }  // namespace monitostr::net

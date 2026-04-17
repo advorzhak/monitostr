@@ -33,4 +33,30 @@ TEST_CASE("SplitRelayHostAndTarget preserves paths and query parameters", "[rela
   CHECK(parsed.target == "/ws?global=all");
 }
 
+TEST_CASE("ParseRelayUrl parses secure relay URLs", "[relay_target]") {
+  const auto parsed = ParseRelayUrl("wss://relay.example/ws?global=all");
+
+  REQUIRE(parsed.has_value());
+  CHECK(parsed->secure);
+  CHECK(parsed->host == "relay.example");
+  CHECK(parsed->port == "443");
+  CHECK(parsed->target == "/ws?global=all");
+}
+
+TEST_CASE("ParseRelayUrl parses insecure relay URLs with explicit port", "[relay_target]") {
+  const auto parsed = ParseRelayUrl("ws://relay.example:8080");
+
+  REQUIRE(parsed.has_value());
+  CHECK_FALSE(parsed->secure);
+  CHECK(parsed->host == "relay.example");
+  CHECK(parsed->port == "8080");
+  CHECK(parsed->target == "/");
+}
+
+TEST_CASE("ParseRelayUrl rejects URLs without websocket scheme", "[relay_target]") {
+  const auto parsed = ParseRelayUrl("relay.example");
+
+  CHECK_FALSE(parsed.has_value());
+}
+
 }  // namespace monitostr::net

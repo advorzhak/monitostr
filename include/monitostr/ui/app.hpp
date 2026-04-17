@@ -23,6 +23,8 @@
 
 #include "monitostr/model/log_buffer.hpp"
 #include "monitostr/model/relay_stats.hpp"
+#include "monitostr/ui/command_processor.hpp"
+#include "monitostr/ui/navigation_controller.hpp"
 
 namespace monitostr::ui {
 
@@ -48,17 +50,6 @@ class App {
     kInsert,
     kSearch,
     kCommand,
-  };
-
-  enum class ActivePane {
-    kRelays,
-    kLogs,
-  };
-
-  enum class CompactMode {
-    kAuto,
-    kForceCompact,
-    kForceWide,
   };
 
   ftxui::Component BuildComponentTree();

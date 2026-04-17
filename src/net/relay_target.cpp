@@ -30,4 +30,36 @@ RelayHostTarget SplitRelayHostAndTarget(std::string_view relay) {
   return {std::string(relay.substr(0, target_pos)), std::string(relay.substr(target_pos))};
 }
 
+std::optional<ParsedRelayUrl> ParseRelayUrl(std::string_view relay_url) {
+  ParsedRelayUrl parsed;
+  std::string_view value = relay_url;
+  if (value.rfind("wss://", 0) == 0) {
+    parsed.secure = true;
+    parsed.port = "443";
+    value.remove_prefix(6);
+  } else if (value.rfind("ws://", 0) == 0) {
+    parsed.secure = false;
+    parsed.port = "80";
+    value.remove_prefix(5);
+  } else {
+    return std::nullopt;
+  }
+
+  const RelayHostTarget host_target = SplitRelayHostAndTarget(value);
+  parsed.host = host_target.host;
+  parsed.target = host_target.target;
+
+  const std::size_t colon = parsed.host.find(':');
+  if (colon != std::string::npos) {
+    parsed.port = parsed.host.substr(colon + 1);
+    parsed.host = parsed.host.substr(0, colon);
+  }
+
+  if (parsed.host.empty()) {
+    return std::nullopt;
+  }
+
+  return parsed;
+}
+
 }  // namespace monitostr::net

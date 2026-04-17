@@ -21,6 +21,7 @@
 #include <boost/asio/ssl/context.hpp>
 #include <boost/asio/ssl/stream.hpp>
 #include <boost/asio/strand.hpp>
+#include <boost/asio/thread_pool.hpp>
 #include <boost/beast/core/flat_buffer.hpp>
 #include <boost/beast/core/tcp_stream.hpp>
 #include <boost/beast/ssl.hpp>            // boost::beast::ssl_stream type
@@ -33,20 +34,15 @@
 
 #include "monitostr/model/log_buffer.hpp"
 #include "monitostr/model/relay_stats.hpp"
+#include "monitostr/net/relay_target.hpp"
 #include "monitostr/nostr/auth_key.hpp"
 
 namespace monitostr::net {
 
 class RelaySession : public std::enable_shared_from_this<RelaySession> {
  public:
-  struct ParsedRelay {
-    std::string host;
-    std::string port;
-    std::string target;
-  };
-
   RelaySession(boost::asio::io_context& io_context, boost::asio::ssl::context& ssl_context,
-               std::shared_ptr<monitostr::model::RelayStats> shared_stats,
+               boost::asio::thread_pool& background_pool, std::shared_ptr<monitostr::model::RelayStats> shared_stats,
                std::shared_ptr<monitostr::model::LogBuffer> log_buffer, std::string relay_url, std::string hex_pubkey);
 
   void Start();
@@ -84,11 +80,13 @@ class RelaySession : public std::enable_shared_from_this<RelaySession> {
   boost::asio::steady_timer reconnect_timer_;
   boost::beast::flat_buffer read_buffer_;
 
+  boost::asio::ssl::context& ssl_context_;
+  boost::asio::thread_pool& background_pool_;
   std::shared_ptr<monitostr::model::RelayStats> shared_stats_;
   std::shared_ptr<monitostr::model::LogBuffer> log_buffer_;
   std::string relay_url_;
   std::string hex_pubkey_;
-  ParsedRelay parsed_relay_;
+  ParsedRelayUrl parsed_relay_;
 
   bool stopped_ = false;
   std::shared_ptr<const monitostr::nostr::AuthKey> auth_key_;  // null → NIP-42 auth disabled

@@ -33,8 +33,8 @@ void SessionManager::Start(const std::vector<std::string>& relay_urls, const std
   }
   sessions_.reserve(relay_urls.size());
   for (const auto& relay_url : relay_urls) {
-    auto session =
-        std::make_shared<RelaySession>(io_context_, ssl_context_, shared_stats_, log_buffer_, relay_url, hex_pubkey);
+    auto session = std::make_shared<RelaySession>(io_context_, ssl_context_, background_pool_, shared_stats_,
+                                                  log_buffer_, relay_url, hex_pubkey);
     session->SetAuthKey(auth_key);
     sessions_.push_back(session);
     session->Start();

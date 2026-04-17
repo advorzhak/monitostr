@@ -17,6 +17,7 @@
 
 #include <boost/asio/io_context.hpp>
 #include <boost/asio/ssl/context.hpp>
+#include <boost/asio/thread_pool.hpp>
 
 #include <memory>
 #include <string>
@@ -44,6 +45,7 @@ class SessionManager {
  private:
   boost::asio::io_context& io_context_;
   boost::asio::ssl::context& ssl_context_;
+  boost::asio::thread_pool background_pool_{2};
   std::shared_ptr<monitostr::model::RelayStats> shared_stats_;
   std::shared_ptr<monitostr::model::LogBuffer> log_buffer_;
   std::vector<std::shared_ptr<RelaySession>> sessions_;

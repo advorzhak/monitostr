@@ -47,6 +47,20 @@ cmake -S . -B build
 cmake --build build -j4
 ```
 
+## Test
+
+```bash
+ctest --test-dir build --output-on-failure
+```
+
+Or build and run the unit/integration binaries directly:
+
+```bash
+cmake --build build --target monitostr_tests monitostr_integration_tests -j4
+./build/monitostr_tests
+./build/monitostr_integration_tests
+```
+
 ## Run
 
 ```bash
@@ -131,6 +145,8 @@ Also included:
 - `:filter <pattern>` - set log filter
 - `:filter clear` - clear log filter
 - `:copylogs`, `:yanklogs` - copy all logs to clipboard
+- `:copyrelay`, `:yankrelay` - copy the selected relay URL to clipboard
+- `:relayinfo`, `:ri` - print selected relay details into logs
 - `:wlogs <path>` - write logs to file
 - `:auth nsec1...` - set NIP-42 signing key for relay AUTH challenges
 - `:help`, `:h` - print command help into logs
@@ -155,11 +171,22 @@ Also included:
 ## Project Layout
 
 - `src/main.cpp`: app bootstrap, io context, session wiring
-- `src/ui/app.cpp`: TUI rendering + key handling
+- `src/ui/app.cpp`: TUI controller that wires render state and input handling
+- `src/ui/ui_renderer.cpp`: presentation layer for the terminal UI
+- `src/ui/command_processor.cpp`: command-mode parsing and execution
+- `src/ui/navigation_controller.cpp`: pane navigation, paging, and log-search stepping
 - `src/net/bootstrap_client.cpp`: relay discovery (NIP-65/NIP-02)
-- `src/net/relay_session.cpp`: per-relay websocket session, TLS, NIP-11, reconnect
+- `src/net/relay_session.cpp`: per-relay websocket session, TLS, auth, and orchestration
+- `src/net/relay_session_support.cpp`: relay-session policy/helpers for REQ payloads, NIP-11 parsing, and reconnect logic
 - `src/net/session_manager.cpp`: multi-relay orchestration
 - `src/model_relay_stats.cpp`: shared relay metrics model
+
+## Architecture Notes
+
+- The UI is intentionally split into controller, renderer, command, and navigation modules so TUI polish and interaction changes can be tested in smaller units.
+- Relay session behavior is split between the async session object and small support helpers so reconnect policy and relay-message semantics can be tested without socket mocks.
+- Most fast tests live in `monitostr_tests`; `monitostr_integration_tests` is reserved for flows that still need more than pure helper-level coverage.
+- The suite now includes small local websocket/TLS fixtures so bootstrap and relay-session flows can be exercised without depending on public relays.
 
 ## License
 

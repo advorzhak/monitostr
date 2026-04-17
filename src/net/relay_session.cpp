@@ -17,7 +17,9 @@
 
 #include <boost/asio/bind_executor.hpp>
 #include <boost/asio/connect.hpp>
+#include <boost/asio/post.hpp>
 #include <boost/asio/ssl/host_name_verification.hpp>
+#include <boost/asio/thread_pool.hpp>
 #include <boost/beast/core/buffers_to_string.hpp>
 #include <boost/beast/http.hpp>
 #include <boost/beast/ssl/ssl_stream.hpp>
@@ -25,46 +27,105 @@
 #include <openssl/err.h>
 #include <openssl/ssl.h>
 
+#include "monitostr/net/relay_session_support.hpp"
 #include "monitostr/net/relay_target.hpp"
 #include "monitostr/nostr/signer.hpp"
 
 #include <chrono>
+#include <optional>
 #include <random>
-#include <thread>
 
 namespace monitostr::net {
 namespace {
 
-RelaySession::ParsedRelay ParseRelay(const std::string& relay_url) {
-  RelaySession::ParsedRelay parsed;
+template <typename Stream>
+void SetIoDeadline(Stream& stream, std::chrono::seconds timeout) {
+  boost::beast::get_lowest_layer(stream).expires_after(timeout);
+}
 
-  std::string value = relay_url;
-  if (value.rfind("wss://", 0) == 0) {
-    value = value.substr(6);
-    parsed.port = "443";
-  } else if (value.rfind("ws://", 0) == 0) {
-    value = value.substr(5);
-    parsed.port = "80";
-  } else {
-    parsed.port = "443";
+std::optional<std::vector<int>> FetchRelaySupportedNips(
+    const ParsedRelayUrl& parsed_relay, const std::string& relay_url, boost::asio::ssl::context& ssl_context,
+    const std::shared_ptr<monitostr::model::LogBuffer>& log_buffer) {
+  namespace http = boost::beast::http;
+  constexpr auto kTimeout = std::chrono::seconds(8);
+
+  try {
+    boost::asio::io_context ioc;
+
+    boost::asio::ip::tcp::resolver resolver(ioc);
+    auto const results = resolver.resolve(parsed_relay.host, parsed_relay.port);
+
+    std::vector<int> nips;
+    if (parsed_relay.secure) {
+      boost::beast::ssl_stream<boost::beast::tcp_stream> stream(ioc, ssl_context);
+      if (!SSL_set_tlsext_host_name(stream.native_handle(), parsed_relay.host.c_str())) {
+        if (log_buffer) {
+          log_buffer->Warn("[" + relay_url + "] NIP-11 SNI setup failed");
+        }
+        return std::nullopt;
+      }
+      stream.set_verify_mode(boost::asio::ssl::verify_peer);
+      stream.set_verify_callback(boost::asio::ssl::host_name_verification(parsed_relay.host));
+
+      SetIoDeadline(stream, kTimeout);
+      boost::beast::get_lowest_layer(stream).connect(results);
+      SetIoDeadline(stream, kTimeout);
+      stream.handshake(boost::asio::ssl::stream_base::client);
+
+      http::request<http::string_body> req{http::verb::get, "/", 11};
+      req.set(http::field::host, parsed_relay.host);
+      req.set(http::field::user_agent, "monitostr");
+      req.set(http::field::accept, "application/nostr+json");
+
+      SetIoDeadline(stream, kTimeout);
+      http::write(stream, req);
+
+      boost::beast::flat_buffer buffer;
+      http::response<http::string_body> res;
+      SetIoDeadline(stream, kTimeout);
+      http::read(stream, buffer, res);
+
+      nips = ParseSupportedNipsFromNip11Body(res.body());
+
+      boost::system::error_code shutdown_ec;
+      stream.shutdown(shutdown_ec);
+    } else {
+      boost::beast::tcp_stream stream(ioc);
+      SetIoDeadline(stream, kTimeout);
+      stream.connect(results);
+
+      http::request<http::string_body> req{http::verb::get, "/", 11};
+      req.set(http::field::host, parsed_relay.host);
+      req.set(http::field::user_agent, "monitostr");
+      req.set(http::field::accept, "application/nostr+json");
+
+      SetIoDeadline(stream, kTimeout);
+      http::write(stream, req);
+
+      boost::beast::flat_buffer buffer;
+      http::response<http::string_body> res;
+      SetIoDeadline(stream, kTimeout);
+      http::read(stream, buffer, res);
+
+      nips = ParseSupportedNipsFromNip11Body(res.body());
+
+      boost::system::error_code shutdown_ec;
+      stream.socket().shutdown(boost::asio::ip::tcp::socket::shutdown_both, shutdown_ec);
+    }
+
+    return nips;
+  } catch (const std::exception& ex) {
+    if (log_buffer) {
+      log_buffer->Warn("[" + relay_url + "] NIP-11 fetch failed: " + std::string(ex.what()));
+    }
+    return std::nullopt;
   }
-
-  const RelayHostTarget host_target = SplitRelayHostAndTarget(value);
-  parsed.host = host_target.host;
-  parsed.target = host_target.target;
-
-  const std::size_t colon = parsed.host.find(':');
-  if (colon != std::string::npos) {
-    parsed.port = parsed.host.substr(colon + 1);
-    parsed.host = parsed.host.substr(0, colon);
-  }
-
-  return parsed;
 }
 
 }  // namespace
 
 RelaySession::RelaySession(boost::asio::io_context& io_context, boost::asio::ssl::context& ssl_context,
+                           boost::asio::thread_pool& background_pool,
                            std::shared_ptr<monitostr::model::RelayStats> shared_stats,
                            std::shared_ptr<monitostr::model::LogBuffer> log_buffer, std::string relay_url,
                            std::string hex_pubkey)
@@ -72,17 +133,39 @@ RelaySession::RelaySession(boost::asio::io_context& io_context, boost::asio::ssl
       resolver_(io_context),
       ws_(io_context, ssl_context),
       reconnect_timer_(io_context),
+      ssl_context_(ssl_context),
+      background_pool_(background_pool),
       shared_stats_(std::move(shared_stats)),
       log_buffer_(std::move(log_buffer)),
       relay_url_(std::move(relay_url)),
       hex_pubkey_(std::move(hex_pubkey)) {
-  parsed_relay_ = ParseRelay(relay_url_);
+  if (const auto parsed = monitostr::net::ParseRelayUrl(relay_url_); parsed.has_value()) {
+    parsed_relay_ = *parsed;
+  }
 }
 
 void RelaySession::Start() {
   boost::asio::dispatch(strand_, [self = shared_from_this()]() {
     self->stopped_ = false;
     self->reconnect_timer_.cancel();
+    self->ParseRelayUrl();
+    if (self->parsed_relay_.host.empty()) {
+      self->shared_stats_->EnsureRelay(self->relay_url_);
+      self->shared_stats_->SetStatus(self->relay_url_, monitostr::model::RelayStatus::kError, "invalid relay URL");
+      if (self->log_buffer_) {
+        self->log_buffer_->Error("[" + self->relay_url_ + "] invalid relay URL");
+      }
+      return;
+    }
+    if (!self->parsed_relay_.secure) {
+      self->shared_stats_->EnsureRelay(self->relay_url_);
+      self->shared_stats_->SetStatus(self->relay_url_, monitostr::model::RelayStatus::kError,
+                                     "unsupported ws:// relay URL");
+      if (self->log_buffer_) {
+        self->log_buffer_->Warn("[" + self->relay_url_ + "] ws:// relay URLs are not supported yet; skipping session");
+      }
+      return;
+    }
     if (self->log_buffer_) {
       self->log_buffer_->Info("[" + self->relay_url_ + "] resolving host " + self->parsed_relay_.host);
     }
@@ -108,7 +191,12 @@ void RelaySession::Stop() {
   });
 }
 
-void RelaySession::ParseRelayUrl() { parsed_relay_ = ParseRelay(relay_url_); }
+void RelaySession::ParseRelayUrl() {
+  parsed_relay_ = {};
+  if (const auto parsed = monitostr::net::ParseRelayUrl(relay_url_); parsed.has_value()) {
+    parsed_relay_ = *parsed;
+  }
+}
 
 void RelaySession::StartResolve() {
   resolver_.async_resolve(
@@ -202,105 +290,22 @@ void RelaySession::OnWsHandshake(const boost::system::error_code& ec) {
   shared_stats_->SetStatus(relay_url_, monitostr::model::RelayStatus::kSubscribed);
   req_sent_at_ = std::chrono::steady_clock::now();
 
-  // Query relay metadata over NIP-11 in a separate thread so monitoring starts immediately.
-  {
-    const auto shared_stats = shared_stats_;
-    const auto log_buffer = log_buffer_;
-    const auto relay_url = relay_url_;
-    const auto host = parsed_relay_.host;
-    const auto port = parsed_relay_.port.empty() ? std::string("443") : parsed_relay_.port;
-    const bool is_tls = relay_url.rfind("wss://", 0) == 0;
-
-    std::thread([shared_stats, log_buffer, relay_url, host, port, is_tls]() {
-      namespace http = boost::beast::http;
-      try {
-        boost::asio::io_context ioc;
-        boost::asio::ssl::context ssl_ctx(boost::asio::ssl::context::tls_client);
-        ssl_ctx.set_default_verify_paths();
-
-        boost::asio::ip::tcp::resolver resolver(ioc);
-        auto const results = resolver.resolve(host, port);
-
-        if (is_tls) {
-          boost::beast::ssl_stream<boost::beast::tcp_stream> stream(ioc, ssl_ctx);
-          if (!SSL_set_tlsext_host_name(stream.native_handle(), host.c_str())) {
-            if (log_buffer) {
-              log_buffer->Warn("[" + relay_url + "] NIP-11 SNI setup failed");
-            }
-            return;
-          }
-          stream.set_verify_mode(boost::asio::ssl::verify_peer);
-          stream.set_verify_callback(boost::asio::ssl::host_name_verification(host));
-
-          boost::beast::get_lowest_layer(stream).connect(results);
-          stream.handshake(boost::asio::ssl::stream_base::client);
-
-          http::request<http::string_body> req{http::verb::get, "/", 11};
-          req.set(http::field::host, host);
-          req.set(http::field::user_agent, "monitostr");
-          req.set(http::field::accept, "application/nostr+json");
-
-          http::write(stream, req);
-
-          boost::beast::flat_buffer buffer;
-          http::response<http::string_body> res;
-          http::read(stream, buffer, res);
-
-          std::vector<int> nips;
-          auto json = nlohmann::json::parse(res.body(), nullptr, false);
-          if (!json.is_discarded() && json.contains("supported_nips") && json["supported_nips"].is_array()) {
-            for (const auto& v : json["supported_nips"]) {
-              if (v.is_number_integer()) {
-                nips.push_back(v.get<int>());
-              }
-            }
-          }
-          shared_stats->SetSupportedNips(relay_url, std::move(nips));
-          if (log_buffer) {
-            log_buffer->Info("[" + relay_url + "] NIP-11 capabilities loaded");
-          }
-
-          boost::system::error_code shutdown_ec;
-          stream.shutdown(shutdown_ec);
-        } else {
-          boost::beast::tcp_stream stream(ioc);
-          stream.connect(results);
-
-          http::request<http::string_body> req{http::verb::get, "/", 11};
-          req.set(http::field::host, host);
-          req.set(http::field::user_agent, "monitostr");
-          req.set(http::field::accept, "application/nostr+json");
-
-          http::write(stream, req);
-
-          boost::beast::flat_buffer buffer;
-          http::response<http::string_body> res;
-          http::read(stream, buffer, res);
-
-          std::vector<int> nips;
-          auto json = nlohmann::json::parse(res.body(), nullptr, false);
-          if (!json.is_discarded() && json.contains("supported_nips") && json["supported_nips"].is_array()) {
-            for (const auto& v : json["supported_nips"]) {
-              if (v.is_number_integer()) {
-                nips.push_back(v.get<int>());
-              }
-            }
-          }
-          shared_stats->SetSupportedNips(relay_url, std::move(nips));
-          if (log_buffer) {
-            log_buffer->Info("[" + relay_url + "] NIP-11 capabilities loaded");
-          }
-
-          boost::system::error_code ec_shutdown;
-          stream.socket().shutdown(boost::asio::ip::tcp::socket::shutdown_both, ec_shutdown);
-        }
-      } catch (const std::exception& ex) {
-        if (log_buffer) {
-          log_buffer->Warn("[" + relay_url + "] NIP-11 fetch failed: " + std::string(ex.what()));
-        }
+  const auto parsed_relay = parsed_relay_;
+  boost::asio::post(background_pool_, [self = shared_from_this(), parsed_relay]() {
+    const auto nips = FetchRelaySupportedNips(parsed_relay, self->relay_url_, self->ssl_context_, self->log_buffer_);
+    if (!nips.has_value()) {
+      return;
+    }
+    boost::asio::post(self->strand_, [self, nips = std::move(*nips)]() mutable {
+      if (self->stopped_) {
+        return;
       }
-    }).detach();
-  }
+      self->shared_stats_->SetSupportedNips(self->relay_url_, std::move(nips));
+      if (self->log_buffer_) {
+        self->log_buffer_->Info("[" + self->relay_url_ + "] NIP-11 capabilities loaded");
+      }
+    });
+  });
 
   const std::string req = BuildReqMessage();
   ws_.async_write(
@@ -343,37 +348,28 @@ void RelaySession::OnRead(const boost::system::error_code& ec, std::size_t bytes
   }
 }
 
-std::string RelaySession::BuildReqMessage() const {
-  nlohmann::json filter = {
-      {"authors", nlohmann::json::array({hex_pubkey_})},
-      {"kinds", nlohmann::json::array({1})},
-      {"limit", 1},
-  };
-
-  nlohmann::json req = nlohmann::json::array({"REQ", "monitostr-sub", filter});
-  return req.dump();
-}
+std::string RelaySession::BuildReqMessage() const { return BuildMonitorReqMessage(hex_pubkey_); }
 
 void RelaySession::HandleMessage(const std::string& payload) {
-  auto parsed = nlohmann::json::parse(payload, nullptr, false);
-  if (parsed.is_discarded() || !parsed.is_array() || parsed.empty() || !parsed[0].is_string()) {
-    return;
-  }
-
-  const std::string kind = parsed[0].get<std::string>();
-  if (kind == "AUTH") {
-    if (parsed.size() >= 2 && parsed[1].is_string()) {
-      OnAuthChallenge(parsed[1].get<std::string>());
+  const auto effect = ParseRelayMessageEffect(payload);
+  switch (effect.type) {
+    case RelayMessageEffect::Type::kAuthChallenge:
+      OnAuthChallenge(effect.challenge);
+      break;
+    case RelayMessageEffect::Type::kEventCount:
+      shared_stats_->IncrementEvent(relay_url_);
+      break;
+    case RelayMessageEffect::Type::kEndOfStoredEvents: {
+      const auto now = std::chrono::steady_clock::now();
+      const auto elapsed_ms = std::chrono::duration_cast<std::chrono::milliseconds>(now - req_sent_at_).count();
+      shared_stats_->RecordLatency(relay_url_, static_cast<double>(elapsed_ms));
+      if (log_buffer_) {
+        log_buffer_->Info("[" + relay_url_ + "] EOSE received in " + std::to_string(elapsed_ms) + " ms");
+      }
+      break;
     }
-  } else if (kind == "EVENT") {
-    shared_stats_->IncrementEvent(relay_url_);
-  } else if (kind == "EOSE") {
-    const auto now = std::chrono::steady_clock::now();
-    const auto elapsed_ms = std::chrono::duration_cast<std::chrono::milliseconds>(now - req_sent_at_).count();
-    shared_stats_->RecordLatency(relay_url_, static_cast<double>(elapsed_ms));
-    if (log_buffer_) {
-      log_buffer_->Info("[" + relay_url_ + "] EOSE received in " + std::to_string(elapsed_ms) + " ms");
-    }
+    case RelayMessageEffect::Type::kIgnore:
+      break;
   }
 }
 
@@ -428,17 +424,7 @@ void RelaySession::MarkError(const std::string& where, const boost::system::erro
 }
 
 bool RelaySession::ShouldReconnect(const std::string& where) const {
-  if (stopped_ || reconnect_attempt_ >= kMaxReconnectAttempts) {
-    return false;
-  }
-
-  // Handshake declines are often policy/path issues; avoid retry storms.
-  if (where == "ws_handshake" || where == "set_sni") {
-    return false;
-  }
-
-  return where == "read" || where == "resolve" || where == "connect" || where == "tls_handshake" ||
-         where == "write_req";
+  return ShouldReconnectAttempt(stopped_, reconnect_attempt_, where);
 }
 
 void RelaySession::ResetTransportForReconnect() {
@@ -452,13 +438,9 @@ void RelaySession::ResetTransportForReconnect() {
 
 void RelaySession::ScheduleReconnect(const std::string& reason) {
   ++reconnect_attempt_;
-  const auto exp = static_cast<unsigned>(std::min<std::size_t>(reconnect_attempt_ - 1, 8));
-  const auto base_ms = 500U * (1U << exp);
-  std::mt19937 rng(static_cast<std::mt19937::result_type>(
-      std::hash<std::string>{}(relay_url_) ^
-      static_cast<std::size_t>(std::chrono::steady_clock::now().time_since_epoch().count())));
-  std::uniform_int_distribution<int> jitter(0, 250);
-  const auto delay_ms = std::min<unsigned>(30000U, base_ms + static_cast<unsigned>(jitter(rng)));
+  const auto delay_ms =
+      ComputeReconnectDelayMs(relay_url_, reconnect_attempt_,
+                              static_cast<std::uint64_t>(std::chrono::steady_clock::now().time_since_epoch().count()));
 
   if (log_buffer_) {
     log_buffer_->Warn("[" + relay_url_ + "] reconnect " + std::to_string(reconnect_attempt_) + "/" +
