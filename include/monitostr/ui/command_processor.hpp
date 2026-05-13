@@ -32,7 +32,6 @@ enum class CompactMode {
 
 struct CommandState {
   bool logs_follow = true;
-  bool nips_wrap_selected_row = true;
   CompactMode compact_mode = CompactMode::kAuto;
   std::string logs_search_query;
   std::size_t logs_search_hit_ordinal = 0;

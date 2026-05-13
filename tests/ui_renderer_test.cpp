@@ -86,6 +86,54 @@ TEST_CASE("SummarizeSelectedRelay returns placeholders when nothing is selected"
   CHECK(summary.relay_error == "none");
 }
 
+TEST_CASE("ComputeRelayListViewport centers the selected relay when possible", "[ui][renderer]") {
+  const auto viewport = ComputeRelayListViewport(20, 10, 6);
+
+  CHECK(viewport.start == 7);
+  CHECK(viewport.end == 13);
+  CHECK(viewport.meta == "8-13 of 20");
+}
+
+TEST_CASE("ComputeRelayListViewport clamps near the end of the list", "[ui][renderer]") {
+  const auto viewport = ComputeRelayListViewport(8, 7, 5);
+
+  CHECK(viewport.start == 3);
+  CHECK(viewport.end == 8);
+  CHECK(viewport.meta == "4-8 of 8");
+}
+
+TEST_CASE("ComputeRelayListViewport reports zero state", "[ui][renderer]") {
+  const auto viewport = ComputeRelayListViewport(0, 0, 5);
+
+  CHECK(viewport.start == 0);
+  CHECK(viewport.end == 0);
+  CHECK(viewport.meta == "0 discovered");
+}
+
+TEST_CASE("ComputeRelayListViewport falls back to total when visible_rows is zero", "[ui][renderer]") {
+  const auto viewport = ComputeRelayListViewport(4, 2, 0);
+
+  CHECK(viewport.start == 0);
+  CHECK(viewport.end == 4);
+  CHECK(viewport.meta == "1-4 of 4");
+}
+
+TEST_CASE("ComputeRelayListViewport keeps the start at zero for early selections", "[ui][renderer]") {
+  const auto viewport = ComputeRelayListViewport(10, 0, 5);
+
+  CHECK(viewport.start == 0);
+  CHECK(viewport.end == 5);
+  CHECK(viewport.meta == "1-5 of 10");
+}
+
+TEST_CASE("ComputeRelayListViewport clamps an out-of-range selection", "[ui][renderer]") {
+  const auto viewport = ComputeRelayListViewport(5, 100, 3);
+
+  CHECK(viewport.start == 2);
+  CHECK(viewport.end == 5);
+  CHECK(viewport.meta == "3-5 of 5");
+}
+
 TEST_CASE("RenderApp includes key panels and mode labels in the rendered frame", "[ui][renderer]") {
   RenderContext context{
       .compact = true,
@@ -116,6 +164,7 @@ TEST_CASE("RenderApp includes key panels and mode labels in the rendered frame",
 
   CHECK(output.find("RELAYS") != std::string::npos);
   CHECK(output.find("LOG STREAM") != std::string::npos);
+  CHECK(output.find("1-1 of 1") != std::string::npos);
   CHECK(output.find("relayinfo") != std::string::npos);
   CHECK(output.find("npub1example") != std::string::npos);
 }

@@ -156,7 +156,6 @@ ftxui::Component App::BuildComponentTree() {
                                             : (mode_ == UiMode::kCommand ? RenderMode::kCommand : RenderMode::kNormal)),
         .active_pane = active_pane_,
         .logs_follow = logs_follow_,
-        .nips_wrap_selected_row = nips_wrap_selected_row_,
         .compact_mode = compact_mode_,
         .npub_line = npub_line,
         .hex_line = hex_line,
@@ -185,7 +184,6 @@ ftxui::Component App::BuildComponentTree() {
       if (event == Event::Return) {
         CommandState command_state{
             .logs_follow = logs_follow_,
-            .nips_wrap_selected_row = nips_wrap_selected_row_,
             .compact_mode = compact_mode_,
             .logs_search_query = logs_search_query_,
             .logs_search_hit_ordinal = logs_search_hit_ordinal_,
@@ -211,7 +209,6 @@ ftxui::Component App::BuildComponentTree() {
                            },
                        });
         logs_follow_ = command_state.logs_follow;
-        nips_wrap_selected_row_ = command_state.nips_wrap_selected_row;
         compact_mode_ = command_state.compact_mode;
         logs_search_query_ = std::move(command_state.logs_search_query);
         logs_search_hit_ordinal_ = command_state.logs_search_hit_ordinal;

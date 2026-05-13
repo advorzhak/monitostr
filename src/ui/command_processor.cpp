@@ -160,16 +160,6 @@ void ExecuteCommand(const std::string& raw_command, CommandState& state,
     if (log_buffer) {
       log_buffer->Info("Logs follow mode disabled (:set nofollow)");
     }
-  } else if (cmd == "set nipswrap") {
-    state.nips_wrap_selected_row = true;
-    if (log_buffer) {
-      log_buffer->Info("Selected-row NIPs wrapping enabled (:set nipswrap)");
-    }
-  } else if (cmd == "set nonipswrap") {
-    state.nips_wrap_selected_row = false;
-    if (log_buffer) {
-      log_buffer->Info("Selected-row NIPs wrapping disabled (:set nonipswrap)");
-    }
   } else if (cmd == "set compact") {
     state.compact_mode = CompactMode::kForceCompact;
     if (log_buffer) {

@@ -43,7 +43,6 @@ struct RenderContext {
   RenderMode mode = RenderMode::kNormal;
   ActivePane active_pane = ActivePane::kRelays;
   bool logs_follow = true;
-  bool nips_wrap_selected_row = true;
   CompactMode compact_mode = CompactMode::kAuto;
   std::string npub_line;
   std::string hex_line;
@@ -71,8 +70,16 @@ struct SelectedRelaySummary {
   std::string relay_error;
 };
 
+struct RelayListViewport {
+  std::size_t start = 0;
+  std::size_t end = 0;
+  std::string meta;
+};
+
 std::string TruncateWithEllipsis(const std::string& value, std::size_t max_len);
 std::string FormatNips(const std::vector<int>& nips);
+RelayListViewport ComputeRelayListViewport(std::size_t total_relays, std::size_t selected_relay,
+                                           std::size_t visible_rows);
 LogStreamSummary SummarizeLogStream(const RenderContext& context);
 SelectedRelaySummary SummarizeSelectedRelay(const RenderContext& context);
 ftxui::Element RenderApp(const RenderContext& context);

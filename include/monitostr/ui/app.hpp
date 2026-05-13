@@ -70,7 +70,6 @@ class App {
   std::size_t logs_search_hit_ordinal_ = 0;
   std::string command_line_;
   std::function<void()> request_exit_;
-  bool nips_wrap_selected_row_ = true;
   CompactMode compact_mode_ = CompactMode::kAuto;
 };
 

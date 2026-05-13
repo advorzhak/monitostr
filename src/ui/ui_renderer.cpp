@@ -226,18 +226,23 @@ ftxui::Element RenderRelayTable(const RenderContext& context, bool focused) {
   using namespace ftxui;
   const auto& palette = UiPalette();
 
-  const int relay_w = context.compact ? 24 : 36;
+  const int index_w = context.compact ? 4 : 5;
+  const int relay_w = context.compact ? 21 : 31;
   const int status_w = context.compact ? 9 : 12;
   const int latency_w = context.compact ? 7 : 10;
   const int events_w = context.compact ? 6 : 8;
-  const int nips_w = context.compact ? 18 : 24;
+  const int nips_w = context.compact ? 12 : 16;
   const int spark_w = context.compact ? 0 : 24;
   const bool show_sparkline = !context.compact;
+  const RelayListViewport viewport =
+      ComputeRelayListViewport(context.relay_stats.size(), context.selected_relay, context.relay_rows);
 
   std::vector<Element> rows;
-  rows.push_back(RenderPanelTitle("RELAYS", std::to_string(context.relay_stats.size()) + " discovered", focused));
+  rows.push_back(RenderPanelTitle("RELAYS", viewport.meta, focused));
   rows.push_back(separator());
   rows.push_back(hbox({
+                     text("#") | bold | size(WIDTH, EQUAL, index_w),
+                     separator(),
                      text("Relay") | bold | size(WIDTH, EQUAL, relay_w),
                      separator(),
                      text("Status") | bold | size(WIDTH, EQUAL, status_w),
@@ -253,22 +258,12 @@ ftxui::Element RenderRelayTable(const RenderContext& context, bool focused) {
                  bold | color(palette.text_muted));
   rows.push_back(separator());
 
-  std::size_t start = 0;
-  if (context.relay_rows > 0 && context.selected_relay >= context.relay_rows) {
-    start = context.selected_relay - context.relay_rows + 1;
-  }
-  if (start > context.relay_stats.size()) {
-    start = 0;
-  }
-  const std::size_t end = context.relay_rows == 0 ? context.relay_stats.size()
-                                                  : std::min(context.relay_stats.size(), start + context.relay_rows);
-
   if (context.relay_stats.empty()) {
     rows.push_back(text("Waiting for relay discovery...") | color(palette.text_muted));
     rows.push_back(separator());
   }
 
-  for (std::size_t idx = start; idx < end; ++idx) {
+  for (std::size_t idx = viewport.start; idx < viewport.end; ++idx) {
     const auto& stat = context.relay_stats[idx];
     std::string latency = "-";
     if (stat.latency_ms.has_value()) {
@@ -276,16 +271,16 @@ ftxui::Element RenderRelayTable(const RenderContext& context, bool focused) {
     }
     const std::string nips_full = FormatNips(stat.supported_nips);
     const bool is_selected = idx == context.selected_relay;
-    const std::string nips_compact = TruncateWithEllipsis(nips_full, static_cast<std::size_t>(nips_w - 2));
-
-    Element nips_cell;
-    if (is_selected && context.nips_wrap_selected_row) {
-      nips_cell = paragraph(nips_full) | size(WIDTH, EQUAL, nips_w) | size(HEIGHT, LESS_THAN, context.compact ? 3 : 5);
-    } else {
-      nips_cell = text(nips_compact) | size(WIDTH, EQUAL, nips_w);
+    const std::string nips_compact = TruncateWithEllipsis(nips_full, static_cast<std::size_t>(nips_w - 1));
+    std::string ordinal = std::to_string(idx + 1);
+    if (ordinal.size() > static_cast<std::size_t>(index_w)) {
+      ordinal.erase(static_cast<std::size_t>(index_w) - 1);
+      ordinal += "+";
     }
 
     Elements cols = {
+        text(ordinal) | color(is_selected ? palette.accent : palette.text_muted) | size(WIDTH, EQUAL, index_w),
+        separator(),
         text(TruncateWithEllipsis(stat.relay_url, static_cast<std::size_t>(relay_w - 1))) | size(WIDTH, EQUAL, relay_w),
         separator(),
         RenderChip(monitostr::model::ToString(stat.status), StatusColor(stat.status), palette.panel_alt) |
@@ -297,7 +292,7 @@ ftxui::Element RenderRelayTable(const RenderContext& context, bool focused) {
         text(std::to_string(stat.events_count)) | color(stat.events_count > 0 ? palette.accent : palette.text_muted) |
             size(WIDTH, EQUAL, events_w),
         separator(),
-        nips_cell,
+        text(nips_compact) | size(WIDTH, EQUAL, nips_w),
     };
 
     if (show_sparkline) {
@@ -315,15 +310,15 @@ ftxui::Element RenderRelayTable(const RenderContext& context, bool focused) {
     rows.push_back(separator());
   }
 
-  const std::size_t shown_rows = end > start ? end - start : 0;
+  const std::size_t shown_rows = viewport.end > viewport.start ? viewport.end - viewport.start : 0;
   const std::size_t relay_panel_height = 4 + shown_rows * 2;
-  auto body =
-      hbox({
-          vbox(std::move(rows)) | flex,
-          separator(),
-          RenderVerticalScrollBar(context.relay_stats.size(), start, context.relay_rows, relay_panel_height, focused),
-      }) |
-      border;
+  auto body = hbox({
+                  vbox(std::move(rows)) | flex,
+                  separator(),
+                  RenderVerticalScrollBar(context.relay_stats.size(), viewport.start, context.relay_rows,
+                                          relay_panel_height, focused),
+              }) |
+              border;
   return body | color(focused ? palette.border_focus : palette.border) | bgcolor(palette.panel);
 }
 
@@ -380,6 +375,29 @@ std::string FormatNips(const std::vector<int>& nips) {
     out += std::to_string(nips[i]);
   }
   return out;
+}
+
+RelayListViewport ComputeRelayListViewport(std::size_t total_relays, std::size_t selected_relay,
+                                           std::size_t visible_rows) {
+  RelayListViewport viewport;
+  if (total_relays == 0) {
+    viewport.meta = "0 discovered";
+    return viewport;
+  }
+
+  const std::size_t clamped_visible = visible_rows == 0 ? total_relays : std::min(visible_rows, total_relays);
+  const std::size_t clamped_selected = std::min(selected_relay, total_relays - 1);
+  const std::size_t preferred_offset = clamped_visible > 2 ? clamped_visible / 2 : 0;
+  std::size_t start = clamped_selected > preferred_offset ? clamped_selected - preferred_offset : 0;
+  if (start + clamped_visible > total_relays) {
+    start = total_relays - clamped_visible;
+  }
+
+  viewport.start = start;
+  viewport.end = start + clamped_visible;
+  viewport.meta =
+      std::to_string(start + 1) + "-" + std::to_string(viewport.end) + " of " + std::to_string(total_relays);
+  return viewport;
 }
 
 LogStreamSummary SummarizeLogStream(const RenderContext& context) {
