@@ -196,7 +196,7 @@ ftxui::Element RenderLogs(const RenderContext& context, bool focused) {
 }
 
 ftxui::Element RenderSparkline(const RelayStat& stat) {
-  std::vector<double> history(stat.latency_history_ms.begin(), stat.latency_history_ms.end());
+  const std::deque<double>& history = stat.latency_history_ms;
 
   double max_val = 1.0;
   for (double v : history) {
@@ -205,7 +205,7 @@ ftxui::Element RenderSparkline(const RelayStat& stat) {
     }
   }
 
-  auto graph_fn = [history, max_val](int width, int height) -> std::vector<int> {
+  auto graph_fn = [&history, max_val](int width, int height) -> std::vector<int> {
     const int n = static_cast<int>(history.size());
     std::vector<int> result(static_cast<std::size_t>(width), 0);
     for (int col = 0; col < width; ++col) {

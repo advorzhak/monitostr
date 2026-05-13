@@ -116,7 +116,7 @@ TEST_CASE("BootstrapClient returns error for empty pubkey without network depend
   boost::asio::io_context io_context;
   boost::asio::ssl::context ssl_context(boost::asio::ssl::context::tls_client);
 
-  BootstrapClient bootstrap(io_context, ssl_context);
+  BootstrapClient bootstrap(io_context);
 
   std::promise<BootstrapResult> completion;
   auto future = completion.get_future();
@@ -147,7 +147,7 @@ TEST_CASE("BootstrapClient resolves relay list from a local websocket seed relay
   boost::asio::ssl::context ssl_context(boost::asio::ssl::context::tls_client);
   auto log_buffer = std::make_shared<monitostr::model::LogBuffer>();
 
-  BootstrapClient bootstrap(io_context, ssl_context);
+  BootstrapClient bootstrap(io_context);
   bootstrap.SetLogBuffer(log_buffer);
 
   std::promise<BootstrapResult> completion;

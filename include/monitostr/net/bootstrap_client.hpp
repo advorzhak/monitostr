@@ -38,7 +38,7 @@ class BootstrapClient {
  public:
   using Completion = std::function<void(BootstrapResult)>;
 
-  BootstrapClient(boost::asio::io_context& io_context, boost::asio::ssl::context& ssl_context);
+  BootstrapClient(boost::asio::io_context& io_context);
 
   void SetLogBuffer(std::shared_ptr<monitostr::model::LogBuffer> log_buffer);
 
@@ -47,7 +47,6 @@ class BootstrapClient {
 
  private:
   boost::asio::io_context& io_context_;
-  [[maybe_unused]] boost::asio::ssl::context& ssl_context_;
   boost::asio::thread_pool worker_pool_{1};
   std::shared_ptr<monitostr::model::LogBuffer> log_buffer_;
 };

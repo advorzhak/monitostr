@@ -53,7 +53,7 @@ int main() {
   auto log_buffer = std::make_shared<monitostr::model::LogBuffer>();
   log_buffer->Info("Application started");
 
-  monitostr::net::BootstrapClient bootstrap(io_context, ssl_context);
+  monitostr::net::BootstrapClient bootstrap(io_context);
   bootstrap.SetLogBuffer(log_buffer);
   monitostr::net::SessionManager session_manager(io_context, ssl_context, shared_stats, log_buffer);
 

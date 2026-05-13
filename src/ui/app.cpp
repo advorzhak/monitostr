@@ -31,35 +31,22 @@
 
 #include "monitostr/security/secure_memory.hpp"
 #include "monitostr/ui/ui_renderer.hpp"
+#include "monitostr/utils/string_utils.hpp"
 
 namespace monitostr::ui {
 namespace {
 
-std::string ToLowerCopy(const std::string& s) {
-  std::string out = s;
-  for (char& c : out) {
-    c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
-  }
-  return out;
-}
+using monitostr::ToLowerCopy;
+using monitostr::TrimCopy;
 
-std::string TrimCopy(const std::string& s) {
-  std::size_t begin = 0;
-  while (begin < s.size() && std::isspace(static_cast<unsigned char>(s[begin])) != 0) {
-    ++begin;
+bool LooksLikeNsecInput(std::string_view value) {
+  static constexpr std::string_view kPrefix = "nsec1";
+  if (value.size() < kPrefix.size()) return false;
+  for (std::size_t i = 0; i < kPrefix.size(); ++i) {
+    if (std::tolower(static_cast<unsigned char>(value[i])) != kPrefix[i]) return false;
   }
-  std::size_t end = s.size();
-  while (end > begin && std::isspace(static_cast<unsigned char>(s[end - 1])) != 0) {
-    --end;
-  }
-  return s.substr(begin, end - begin);
+  return true;
 }
-
-bool StartsWith(const std::string& value, const std::string& prefix) {
-  return value.size() >= prefix.size() && value.compare(0, prefix.size(), prefix) == 0;
-}
-
-bool LooksLikeNsecInput(const std::string& value) { return StartsWith(ToLowerCopy(TrimCopy(value)), "nsec1"); }
 
 std::string FormatRelayReport(const monitostr::model::RelayStat& stat) {
   std::string report = "Selected relay: " + stat.relay_url + " | status=" + monitostr::model::ToString(stat.status);
@@ -122,10 +109,12 @@ ftxui::Component App::BuildComponentTree() {
     if (logs_search_query_.empty()) {
       visible_logs = logs;
     } else {
-      const std::string q = ToLowerCopy(logs_search_query_);
       for (const auto& entry : logs) {
-        const std::string line = ToLowerCopy(entry.timestamp + " " + entry.message);
-        if (line.find(q) != std::string::npos) {
+        const std::string line = entry.timestamp + " " + entry.message;
+        if (std::search(
+                line.begin(), line.end(), logs_search_query_.begin(), logs_search_query_.end(), [](char a, char b) {
+                  return std::tolower(static_cast<unsigned char>(a)) == std::tolower(static_cast<unsigned char>(b));
+                }) != line.end()) {
           visible_logs.push_back(entry);
         }
       }

@@ -15,38 +15,24 @@
 
 #include "monitostr/ui/command_processor.hpp"
 
+#include <algorithm>
 #include <cstdio>
 #include <cctype>
 #include <fstream>
 #include <vector>
 
+#include "monitostr/utils/string_utils.hpp"
+
 namespace monitostr::ui {
 namespace {
+
+using monitostr::ToLowerCopy;
+using monitostr::TrimCopy;
 
 struct CommandEntry {
   std::string name;
   std::string desc;
 };
-
-std::string ToLowerCopy(const std::string& s) {
-  std::string out = s;
-  for (char& c : out) {
-    c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
-  }
-  return out;
-}
-
-std::string TrimCopy(const std::string& s) {
-  std::size_t begin = 0;
-  while (begin < s.size() && std::isspace(static_cast<unsigned char>(s[begin])) != 0) {
-    ++begin;
-  }
-  std::size_t end = s.size();
-  while (end > begin && std::isspace(static_cast<unsigned char>(s[end - 1])) != 0) {
-    --end;
-  }
-  return s.substr(begin, end - begin);
-}
 
 bool StartsWith(const std::string& value, const std::string& prefix) {
   return value.size() >= prefix.size() && value.compare(0, prefix.size(), prefix) == 0;

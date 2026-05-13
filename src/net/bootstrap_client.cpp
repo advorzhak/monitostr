@@ -286,8 +286,7 @@ BootstrapResult QuerySeedRelay(const std::string& seed_relay_url, const std::str
 
 }  // namespace
 
-BootstrapClient::BootstrapClient(boost::asio::io_context& io_context, boost::asio::ssl::context& ssl_context)
-    : io_context_(io_context), ssl_context_(ssl_context) {}
+BootstrapClient::BootstrapClient(boost::asio::io_context& io_context) : io_context_(io_context) {}
 
 void BootstrapClient::SetLogBuffer(std::shared_ptr<monitostr::model::LogBuffer> log_buffer) {
   log_buffer_ = std::move(log_buffer);

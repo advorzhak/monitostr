@@ -59,6 +59,9 @@ void SessionManager::StopAll() {
   for (const auto& session : sessions_) {
     session->Stop();
   }
+  // Note: Sessions are cleared here, but shared_from_this references held by
+  // async handlers keep them alive until those handlers complete. The io_context
+  // must continue running for sessions to fully terminate.
   sessions_.clear();
 }
 

@@ -179,15 +179,12 @@ void RelaySession::Stop() {
   boost::asio::dispatch(strand_, [self = shared_from_this()]() {
     self->stopped_ = true;
     self->reconnect_timer_.cancel();
-    boost::system::error_code ignored;
     self->resolver_.cancel();
     self->read_buffer_.consume(self->read_buffer_.size());
-    self->ws_.next_layer().shutdown(ignored);
-    self->ws_.next_layer().next_layer().socket().shutdown(boost::asio::ip::tcp::socket::shutdown_both, ignored);
-    boost::system::error_code ec;
-    self->ws_.next_layer().shutdown(ec);
-    self->ws_.next_layer().next_layer().socket().close(ec);
-    self->shared_stats_->SetStatus(self->relay_url_, monitostr::model::RelayStatus::kDisconnected);
+
+    self->ws_.async_close(boost::beast::websocket::close_code::going_away, [self](boost::beast::error_code) {
+      self->shared_stats_->SetStatus(self->relay_url_, monitostr::model::RelayStatus::kDisconnected);
+    });
   });
 }
 
