@@ -8,8 +8,10 @@ list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 include(CompilerSettings)
 include(Dependencies)
 
-add_executable(monitostr
-  src/main.cpp
+# Fix #16: all shared sources compile once into a static library that both
+# the main executable and the test binary link against, eliminating duplication
+# and build-time drift when new source files are added.
+add_library(monitostr_core STATIC
   src/model_relay_stats.cpp
   src/nip19/npub.cpp
   src/nip19/nsec.cpp
@@ -23,17 +25,15 @@ add_executable(monitostr
   src/ui/command_processor.cpp
   src/ui/navigation_controller.cpp
   src/ui/ui_renderer.cpp
-  src/ui/app.cpp
 )
 
-target_include_directories(monitostr
-  PRIVATE
-    "${PROJECT_SOURCE_DIR}/include"
+target_include_directories(monitostr_core
+  PUBLIC "${PROJECT_SOURCE_DIR}/include"
 )
 
-target_link_libraries(monitostr
-  PRIVATE
-    Boost::headers   # header-only: Asio, Beast, System (since 1.77)
+target_link_libraries(monitostr_core
+  PUBLIC
+    Boost::headers
     OpenSSL::SSL
     OpenSSL::Crypto
     nlohmann_json::nlohmann_json
@@ -41,6 +41,17 @@ target_link_libraries(monitostr
     ftxui::dom
     ftxui::component
     secp256k1::secp256k1
+)
+
+monitostr_apply_compiler_settings(monitostr_core)
+
+add_executable(monitostr
+  src/main.cpp
+  src/ui/app.cpp
+)
+
+target_link_libraries(monitostr
+  PRIVATE monitostr_core
 )
 
 monitostr_apply_compiler_settings(monitostr)
@@ -58,33 +69,12 @@ if(BUILD_TESTING)
     tests/ui_navigation_controller_test.cpp
     tests/ui_renderer_test.cpp
     tests/relay_session_lifecycle_integration_test.cpp
-    src/model_relay_stats.cpp
-    src/nip19/npub.cpp
-    src/net/relay_target.cpp
-    src/net/relay_session_support.cpp
-    src/net/relay_session.cpp
-    src/nostr/auth_key.cpp
-    src/nostr/signer.cpp
-    src/ui/command_processor.cpp
-    src/ui/navigation_controller.cpp
-    src/ui/ui_renderer.cpp
-  )
-
-  target_include_directories(monitostr_tests
-    PRIVATE
-      "${PROJECT_SOURCE_DIR}/include"
   )
 
   target_link_libraries(monitostr_tests
     PRIVATE
+      monitostr_core
       Catch2::Catch2WithMain
-      OpenSSL::Crypto
-      OpenSSL::SSL
-      secp256k1::secp256k1
-      nlohmann_json::nlohmann_json
-      ftxui::screen
-      ftxui::dom
-      ftxui::component
   )
 
   monitostr_apply_compiler_settings(monitostr_tests)
@@ -94,21 +84,11 @@ if(BUILD_TESTING)
 
   add_executable(monitostr_integration_tests
     tests/bootstrap_client_integration_test.cpp
-    src/net/bootstrap_client.cpp
-    src/net/relay_target.cpp
-  )
-
-  target_include_directories(monitostr_integration_tests
-    PRIVATE
-      "${PROJECT_SOURCE_DIR}/include"
   )
 
   target_link_libraries(monitostr_integration_tests
     PRIVATE
-      Boost::headers
-      OpenSSL::SSL
-      OpenSSL::Crypto
-      nlohmann_json::nlohmann_json
+      monitostr_core
       Catch2::Catch2WithMain
   )
 

@@ -18,18 +18,13 @@
 #include <algorithm>
 #include <cctype>
 
+#include "monitostr/utils/string_utils.hpp"
+
 namespace monitostr::ui {
-namespace {
 
-std::string ToLowerCopy(const std::string& s) {
-  std::string out = s;
-  for (char& c : out) {
-    c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
-  }
-  return out;
-}
-
-}  // namespace
+// Fix #11: use the shared helper from string_utils.hpp instead of a locally
+// duplicated implementation.
+using monitostr::ToLowerCopy;
 
 std::vector<std::size_t> FindLogMatches(const std::vector<monitostr::model::LogEntry>& logs, const std::string& query) {
   std::vector<std::size_t> matches;

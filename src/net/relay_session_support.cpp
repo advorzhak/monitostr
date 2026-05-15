@@ -56,7 +56,7 @@ RelayMessageEffect ParseRelayMessageEffect(std::string_view payload) {
 }
 
 bool ShouldReconnectAttempt(bool stopped, std::size_t reconnect_attempt, std::string_view where) {
-  constexpr std::size_t kMaxReconnectAttempts = 6;
+  // Fix #13: use the single shared constant rather than a local copy.
   if (stopped || reconnect_attempt >= kMaxReconnectAttempts) {
     return false;
   }

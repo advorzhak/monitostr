@@ -1,7 +1,3 @@
-// Internal bech32 decoding helpers shared between nip19 modules.
-// Not part of the public API — include only from src/nip19/*.cpp.
-#pragma once
-
 // Copyright (C) 2026 advorzhak
 //
 // This program is free software: you can redistribute it and/or modify
@@ -16,6 +12,12 @@
 //
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
+
+// Internal bech32 decoding helpers shared between nip19 modules.
+// Not part of the public API — include only from src/nip19/*.cpp.
+#pragma once
+
+#include <openssl/crypto.h>  // OPENSSL_cleanse
 
 #include <cctype>
 #include <cstdint>
@@ -116,6 +118,8 @@ inline std::string BytesToHex(const std::vector<std::uint8_t>& bytes) {
 
 // Decode a bech32 string with the expected HRP into raw 32 bytes.
 // On failure, returns empty vector and sets error_out.
+// The caller is responsible for zeroing the returned vector when it contains
+// sensitive material (e.g. a private key decoded from nsec).
 inline std::vector<std::uint8_t> DecodeBech32_32Bytes(const std::string& input, const std::string& expected_hrp,
                                                       std::string& error_out) {
   if (input.empty()) {
@@ -170,10 +174,18 @@ inline std::vector<std::uint8_t> DecodeBech32_32Bytes(const std::string& input, 
   data.resize(data.size() - 6U);
   std::vector<std::uint8_t> bytes;
   if (!ConvertBits(data, 5, 8, false, &bytes)) {
+    // Fix #5: zero the 5-bit encoded data before returning on error.
+    OPENSSL_cleanse(data.data(), data.size());
     error_out = "failed bech32 bit conversion";
     return {};
   }
+
+  // Fix #5: zero the 5-bit encoded data (contains private key material for nsec)
+  // now that ConvertBits has produced the raw bytes.
+  OPENSSL_cleanse(data.data(), data.size());
+
   if (bytes.size() != 32U) {
+    OPENSSL_cleanse(bytes.data(), bytes.size());
     error_out = expected_hrp + " payload is not 32 bytes";
     return {};
   }

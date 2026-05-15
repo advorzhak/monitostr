@@ -21,6 +21,7 @@
 #include <fstream>
 #include <vector>
 
+#include "monitostr/security/secure_memory.hpp"
 #include "monitostr/utils/string_utils.hpp"
 
 namespace monitostr::ui {
@@ -38,14 +39,19 @@ bool StartsWith(const std::string& value, const std::string& prefix) {
   return value.size() >= prefix.size() && value.compare(0, prefix.size(), prefix) == 0;
 }
 
+// Fix #10: format a log entry for file/clipboard output using the level field
+// rather than the embedded prefix that was removed from LogBuffer::Push.
 std::string JoinLogsText(const std::vector<monitostr::model::LogEntry>& logs) {
   std::string out;
   for (const auto& entry : logs) {
-    out += entry.timestamp + " " + entry.message + "\n";
+    out += entry.timestamp + " [" + monitostr::model::ToString(entry.level) + "] " + entry.message + "\n";
   }
   return out;
 }
 
+// Fix #14: clipboard helper is macOS-specific; provide a no-op stub elsewhere
+// so the build succeeds and callers receive a clean false on non-Apple systems.
+#ifdef __APPLE__
 bool CopyTextToClipboardMac(const std::string& text) {
   FILE* pipe = popen("pbcopy", "w");
   if (!pipe) {
@@ -55,6 +61,11 @@ bool CopyTextToClipboardMac(const std::string& text) {
   const int rc = pclose(pipe);
   return written == text.size() && rc == 0;
 }
+#else
+bool CopyTextToClipboardMac(const std::string& /*text*/) {
+  return false;  // clipboard not supported on this platform
+}
+#endif
 
 bool SaveTextToFile(const std::string& path, const std::string& text) {
   std::ofstream out(path, std::ios::out | std::ios::trunc);
@@ -119,7 +130,7 @@ std::string ComputeCommandHint(const std::string& input) {
 void ExecuteCommand(const std::string& raw_command, CommandState& state,
                     const std::shared_ptr<monitostr::model::LogBuffer>& log_buffer, const CommandCallbacks& callbacks) {
   const auto copy_text = callbacks.copy_text ? callbacks.copy_text : CopyTextToClipboardMac;
-  const std::string raw = TrimCopy(raw_command);
+  std::string raw = TrimCopy(raw_command);
   const std::string cmd = ToLowerCopy(raw);
 
   if (cmd == "q" || cmd == "quit" || cmd == "qa" || cmd == "qall") {
@@ -241,6 +252,8 @@ void ExecuteCommand(const std::string& raw_command, CommandState& state,
       }
     } else if (callbacks.on_auth) {
       callbacks.on_auth(std::move(nsec_arg));
+      // Fix #7: the local copy of the raw command still holds the nsec; wipe it.
+      monitostr::security::SecureClearString(raw);
     } else if (log_buffer) {
       log_buffer->Warn("Auth handler not configured");
     }

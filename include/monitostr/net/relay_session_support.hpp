@@ -24,6 +24,9 @@
 
 namespace monitostr::net {
 
+// Shared reconnect limit used by RelaySession and ShouldReconnectAttempt.
+inline constexpr std::size_t kMaxReconnectAttempts = 6;
+
 struct RelayMessageEffect {
   enum class Type {
     kIgnore,

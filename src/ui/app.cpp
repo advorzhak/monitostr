@@ -55,6 +55,11 @@ std::string FormatRelayReport(const monitostr::model::RelayStat& stat) {
   }
   report += " | events=" + std::to_string(stat.events_count);
   report += " | nips=" + (stat.supported_nips.empty() ? std::string("-") : FormatNips(stat.supported_nips));
+  if (stat.connected_at.has_value()) {
+    const auto elapsed =
+        std::chrono::duration_cast<std::chrono::seconds>(std::chrono::steady_clock::now() - *stat.connected_at).count();
+    report += " | uptime=" + std::to_string(elapsed / 60) + "m " + std::to_string(elapsed % 60) + "s";
+  }
   if (!stat.last_error.empty()) {
     report += " | error=" + stat.last_error;
   }
@@ -133,16 +138,13 @@ ftxui::Component App::BuildComponentTree() {
     const std::string hex_line =
         compact ? TruncateWithEllipsis(header_context_.hex_pubkey, tiny ? 28 : 48) : header_context_.hex_pubkey;
 
+    // Fix #12: mode_ is already RenderMode; no enum mapping needed.
     return RenderApp({
         .compact = compact,
         .tiny = tiny,
         .relay_rows = relay_rows,
         .log_lines = log_lines,
-        .mode =
-            mode_ == UiMode::kInsert
-                ? RenderMode::kInsert
-                : (mode_ == UiMode::kSearch ? RenderMode::kSearch
-                                            : (mode_ == UiMode::kCommand ? RenderMode::kCommand : RenderMode::kNormal)),
+        .mode = mode_,
         .active_pane = active_pane_,
         .logs_follow = logs_follow_,
         .compact_mode = compact_mode_,
@@ -163,10 +165,10 @@ ftxui::Component App::BuildComponentTree() {
   auto interactive = CatchEvent(renderer, [this](Event event) {
     constexpr std::size_t kLogPageLines = 8;
 
-    if (mode_ == UiMode::kCommand) {
+    if (mode_ == RenderMode::kCommand) {
       if (event == Event::Escape) {
         monitostr::security::SecureClearString(command_line_);
-        mode_ = UiMode::kNormal;
+        mode_ = RenderMode::kNormal;
         pending_g_ = false;
         return true;
       }
@@ -203,7 +205,7 @@ ftxui::Component App::BuildComponentTree() {
         logs_search_hit_ordinal_ = command_state.logs_search_hit_ordinal;
         logs_scroll_lines_ = command_state.logs_scroll_lines;
         monitostr::security::SecureClearString(command_line_);
-        mode_ = UiMode::kNormal;
+        mode_ = RenderMode::kNormal;
         pending_g_ = false;
         return true;
       }
@@ -239,15 +241,15 @@ ftxui::Component App::BuildComponentTree() {
       logs_search_hit_ordinal_ = navigation_state.logs_search_hit_ordinal;
     };
 
-    if (mode_ == UiMode::kSearch) {
+    if (mode_ == RenderMode::kSearch) {
       if (event == Event::Escape) {
-        mode_ = UiMode::kNormal;
+        mode_ = RenderMode::kNormal;
         navigation_state.pending_g = false;
         apply_navigation_state();
         return true;
       }
       if (event == Event::Return) {
-        mode_ = UiMode::kNormal;
+        mode_ = RenderMode::kNormal;
         navigation_state.logs_search_hit_ordinal = 0;
         navigation_state.pending_g = false;
         apply_navigation_state();
@@ -268,10 +270,10 @@ ftxui::Component App::BuildComponentTree() {
       return false;
     }
 
-    if (mode_ == UiMode::kInsert) {
+    if (mode_ == RenderMode::kInsert) {
       if (event == Event::Escape) {
         monitostr::security::SecureClearString(input_npub_);
-        mode_ = UiMode::kNormal;
+        mode_ = RenderMode::kNormal;
         pending_g_ = false;
         return true;
       }
@@ -285,7 +287,7 @@ ftxui::Component App::BuildComponentTree() {
             on_submit_(std::move(submitted_input));
           }
         }
-        mode_ = UiMode::kNormal;
+        mode_ = RenderMode::kNormal;
         pending_g_ = false;
         return true;
       }
@@ -303,13 +305,13 @@ ftxui::Component App::BuildComponentTree() {
     }
 
     if (event == Event::Character('i')) {
-      mode_ = UiMode::kInsert;
+      mode_ = RenderMode::kInsert;
       navigation_state.pending_g = false;
       apply_navigation_state();
       return true;
     }
     if (event == Event::Character(':')) {
-      mode_ = UiMode::kCommand;
+      mode_ = RenderMode::kCommand;
       monitostr::security::SecureClearString(command_line_);
       navigation_state.pending_g = false;
       apply_navigation_state();
@@ -317,7 +319,7 @@ ftxui::Component App::BuildComponentTree() {
     }
     if (event == Event::Character('/')) {
       navigation_state.active_pane = ActivePane::kLogs;
-      mode_ = UiMode::kSearch;
+      mode_ = RenderMode::kSearch;
       navigation_state.logs_follow = false;
       navigation_state.pending_g = false;
       apply_navigation_state();
@@ -409,7 +411,7 @@ ftxui::Component App::BuildComponentTree() {
     }
 
     if (event == Event::Escape) {
-      mode_ = UiMode::kNormal;
+      mode_ = RenderMode::kNormal;
       apply_navigation_state();
       return true;
     }

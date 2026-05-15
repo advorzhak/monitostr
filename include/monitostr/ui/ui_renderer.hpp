@@ -66,8 +66,11 @@ struct SelectedRelaySummary {
   std::string relay_summary;
   std::string relay_status;
   std::string relay_latency;
+  std::string relay_events;
   std::string relay_nips;
   std::string relay_error;
+  std::string relay_latency_stats;
+  std::string relay_uptime;
 };
 
 struct RelayListViewport {

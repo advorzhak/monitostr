@@ -44,6 +44,7 @@ struct RelayStat {
   std::vector<int> supported_nips;
   std::deque<double> latency_history_ms;
   std::string last_error;
+  std::optional<std::chrono::steady_clock::time_point> connected_at;
 };
 
 struct AggregateStats {

@@ -102,20 +102,26 @@ std::string DeriveHexPubkeyFromPrivkey(const std::array<unsigned char, 32>& priv
   secp256k1_context* ctx = secp256k1_context_create(SECP256K1_CONTEXT_SIGN);
   if (ctx == nullptr) return {};
 
-  secp256k1_keypair keypair;
+  // Fix #6: keypair holds secret material — zero it on every return path.
+  secp256k1_keypair keypair{};
   if (secp256k1_keypair_create(ctx, &keypair, privkey_bytes.data()) != 1) {
+    monitostr::security::SecureZero(&keypair, sizeof(keypair));
     secp256k1_context_destroy(ctx);
     return {};
   }
 
   secp256k1_xonly_pubkey xonly;
   if (secp256k1_keypair_xonly_pub(ctx, &xonly, nullptr, &keypair) != 1) {
+    monitostr::security::SecureZero(&keypair, sizeof(keypair));
     secp256k1_context_destroy(ctx);
     return {};
   }
 
   unsigned char pubkey_bytes[32];
   secp256k1_xonly_pubkey_serialize(ctx, pubkey_bytes, &xonly);
+
+  // Fix #6: zero keypair before returning.
+  monitostr::security::SecureZero(&keypair, sizeof(keypair));
   secp256k1_context_destroy(ctx);
 
   return BytesToHex(pubkey_bytes, 32);
@@ -146,9 +152,11 @@ std::string BuildAuthEvent(const std::string& relay_url, const std::string& chal
   }
   (void)secp256k1_context_randomize(ctx, ctx_seed);
 
-  secp256k1_keypair keypair;
+  // Fix #6: keypair holds secret material — zero it on every return path.
+  secp256k1_keypair keypair{};
   if (secp256k1_keypair_create(ctx, &keypair, privkey_bytes.data()) != 1) {
     monitostr::security::SecureZero(ctx_seed, sizeof(ctx_seed));
+    monitostr::security::SecureZero(&keypair, sizeof(keypair));
     secp256k1_context_destroy(ctx);
     return {};
   }
@@ -156,6 +164,8 @@ std::string BuildAuthEvent(const std::string& relay_url, const std::string& chal
   // Derive x-only public key.
   secp256k1_xonly_pubkey xonly;
   if (secp256k1_keypair_xonly_pub(ctx, &xonly, nullptr, &keypair) != 1) {
+    monitostr::security::SecureZero(ctx_seed, sizeof(ctx_seed));
+    monitostr::security::SecureZero(&keypair, sizeof(keypair));
     secp256k1_context_destroy(ctx);
     return {};
   }
@@ -183,18 +193,23 @@ std::string BuildAuthEvent(const std::string& relay_url, const std::string& chal
   unsigned char aux_rand[32];
   if (RAND_bytes(aux_rand, 32) != 1) {
     monitostr::security::SecureZero(ctx_seed, sizeof(ctx_seed));
+    monitostr::security::SecureZero(&keypair, sizeof(keypair));
     secp256k1_context_destroy(ctx);
     return {};
   }
   unsigned char sig[64];
   if (secp256k1_schnorrsig_sign32(ctx, sig, event_id, &keypair, aux_rand) != 1) {
     monitostr::security::SecureZero(ctx_seed, sizeof(ctx_seed));
+    monitostr::security::SecureZero(&keypair, sizeof(keypair));
     monitostr::security::SecureZero(aux_rand, sizeof(aux_rand));
     monitostr::security::SecureZero(event_id, sizeof(event_id));
     secp256k1_context_destroy(ctx);
     return {};
   }
+
+  // Fix #6: zero all sensitive stack buffers before return.
   monitostr::security::SecureZero(ctx_seed, sizeof(ctx_seed));
+  monitostr::security::SecureZero(&keypair, sizeof(keypair));
   monitostr::security::SecureZero(aux_rand, sizeof(aux_rand));
   monitostr::security::SecureZero(event_id, sizeof(event_id));
   secp256k1_context_destroy(ctx);

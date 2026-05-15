@@ -32,6 +32,7 @@
 #include "monitostr/nostr/signer.hpp"
 
 #include <chrono>
+#include <memory>
 #include <optional>
 #include <random>
 
@@ -144,6 +145,13 @@ RelaySession::RelaySession(boost::asio::io_context& io_context, boost::asio::ssl
   }
 }
 
+// Fix #9: SetAuthKey is strand-safe — dispatches assignment so concurrent calls
+// from any thread safely interleave with OnAuthChallenge and other strand work.
+void RelaySession::SetAuthKey(std::shared_ptr<const monitostr::nostr::AuthKey> auth_key) {
+  boost::asio::dispatch(
+      strand_, [self = shared_from_this(), key = std::move(auth_key)]() mutable { self->auth_key_ = std::move(key); });
+}
+
 void RelaySession::Start() {
   boost::asio::dispatch(strand_, [self = shared_from_this()]() {
     self->stopped_ = false;
@@ -182,9 +190,20 @@ void RelaySession::Stop() {
     self->resolver_.cancel();
     self->read_buffer_.consume(self->read_buffer_.size());
 
-    self->ws_.async_close(boost::beast::websocket::close_code::going_away, [self](boost::beast::error_code) {
+    // Fix #4: only call async_close if the WebSocket handshake has completed.
+    // Calling it on an unconnected stream is undefined behaviour per Beast's API contract.
+    if (self->ws_connected_) {
+      self->ws_connected_ = false;
+      self->ws_.async_close(boost::beast::websocket::close_code::going_away, [self](boost::beast::error_code) {
+        self->shared_stats_->SetStatus(self->relay_url_, monitostr::model::RelayStatus::kDisconnected);
+      });
+    } else {
+      // Cancel any pending TCP-layer operation (resolve, connect, TLS handshake).
+      boost::system::error_code ignored;
+      boost::beast::get_lowest_layer(self->ws_).socket().cancel(ignored);
+      boost::beast::get_lowest_layer(self->ws_).socket().close(ignored);
       self->shared_stats_->SetStatus(self->relay_url_, monitostr::model::RelayStatus::kDisconnected);
-    });
+    }
   });
 }
 
@@ -280,6 +299,7 @@ void RelaySession::OnWsHandshake(const boost::system::error_code& ec) {
   }
 
   reconnect_attempt_ = 0;
+  ws_connected_ = true;  // Fix #4: mark WS as open before any async ops
 
   if (log_buffer_) {
     log_buffer_->Info("[" + relay_url_ + "] subscribed");
@@ -304,11 +324,13 @@ void RelaySession::OnWsHandshake(const boost::system::error_code& ec) {
     });
   });
 
-  const std::string req = BuildReqMessage();
+  // Fix #1: keep the REQ message alive until the async_write completion fires
+  // by holding it in a shared_ptr captured by the lambda.
+  auto req = std::make_shared<std::string>(BuildReqMessage());
   ws_.async_write(
-      boost::asio::buffer(req),
-      boost::asio::bind_executor(strand_, [self = shared_from_this()](const boost::system::error_code& write_ec,
-                                                                      std::size_t bytes_transferred) {
+      boost::asio::buffer(*req),
+      boost::asio::bind_executor(strand_, [self = shared_from_this(), req](const boost::system::error_code& write_ec,
+                                                                           std::size_t bytes_transferred) {
         self->OnWriteReq(write_ec, bytes_transferred);
       }));
 }
@@ -390,23 +412,32 @@ void RelaySession::OnAuthChallenge(const std::string& challenge) {
     return;
   }
 
-  // Send ["AUTH", <event_object>].
-  const std::string msg = nlohmann::json::array({"AUTH", nlohmann::json::parse(event_json)}).dump();
+  // Fix #8: use non-throwing parse and check for discarded before proceeding.
+  auto parsed_event = nlohmann::json::parse(event_json, nullptr, false);
+  if (parsed_event.is_discarded()) {
+    if (log_buffer_) {
+      log_buffer_->Error("[" + relay_url_ + "] NIP-42 AUTH event JSON is malformed");
+    }
+    return;
+  }
 
-  auto self = shared_from_this();
-  ws_.async_write(boost::asio::buffer(msg),
-                  boost::asio::bind_executor(
-                      strand_, [self, relay_url = relay_url_](const boost::system::error_code& ec, std::size_t) {
-                        if (ec) {
-                          if (self->log_buffer_) {
-                            self->log_buffer_->Error("[" + relay_url + "] NIP-42 AUTH write failed: " + ec.message());
-                          }
-                          return;
-                        }
-                        if (self->log_buffer_) {
-                          self->log_buffer_->Info("[" + relay_url + "] NIP-42 AUTH sent");
-                        }
-                      }));
+  // Fix #2: keep the AUTH message alive until async_write completes by holding
+  // it in a shared_ptr captured in the completion lambda.
+  auto msg = std::make_shared<std::string>(nlohmann::json::array({"AUTH", std::move(parsed_event)}).dump());
+
+  ws_.async_write(boost::asio::buffer(*msg),
+                  boost::asio::bind_executor(strand_, [self = shared_from_this(), relay_url = relay_url_, msg](
+                                                          const boost::system::error_code& ec, std::size_t) {
+                    if (ec) {
+                      if (self->log_buffer_) {
+                        self->log_buffer_->Error("[" + relay_url + "] NIP-42 AUTH write failed: " + ec.message());
+                      }
+                      return;
+                    }
+                    if (self->log_buffer_) {
+                      self->log_buffer_->Info("[" + relay_url + "] NIP-42 AUTH sent");
+                    }
+                  }));
 }
 
 void RelaySession::MarkError(const std::string& where, const boost::system::error_code& ec) {
@@ -428,6 +459,7 @@ void RelaySession::ResetTransportForReconnect() {
   boost::system::error_code ignored;
   resolver_.cancel();
   read_buffer_.consume(read_buffer_.size());
+  ws_connected_ = false;  // Fix #4: ensure flag is clear before re-connecting
   ws_.next_layer().shutdown(ignored);
   ws_.next_layer().next_layer().socket().shutdown(boost::asio::ip::tcp::socket::shutdown_both, ignored);
   ws_.next_layer().next_layer().socket().close(ignored);

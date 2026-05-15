@@ -34,6 +34,7 @@
 
 #include "monitostr/model/log_buffer.hpp"
 #include "monitostr/model/relay_stats.hpp"
+#include "monitostr/net/relay_session_support.hpp"
 #include "monitostr/net/relay_target.hpp"
 #include "monitostr/nostr/auth_key.hpp"
 
@@ -47,8 +48,10 @@ class RelaySession : public std::enable_shared_from_this<RelaySession> {
 
   void Start();
   void Stop();
-  // Must be called before Start(). Null disables NIP-42 auth.
-  void SetAuthKey(std::shared_ptr<const monitostr::nostr::AuthKey> auth_key) { auth_key_ = std::move(auth_key); }
+  // Must be called before Start(), or after Start() to update a live session.
+  // Thread-safe: dispatches the assignment onto the session strand.
+  // Null disables NIP-42 auth.
+  void SetAuthKey(std::shared_ptr<const monitostr::nostr::AuthKey> auth_key);
 
  private:
   using Tcp = boost::asio::ip::tcp;
@@ -89,9 +92,9 @@ class RelaySession : public std::enable_shared_from_this<RelaySession> {
   ParsedRelayUrl parsed_relay_;
 
   bool stopped_ = false;
+  bool ws_connected_ = false;                                  // true only after a successful WebSocket handshake
   std::shared_ptr<const monitostr::nostr::AuthKey> auth_key_;  // null → NIP-42 auth disabled
   std::size_t reconnect_attempt_ = 0;
-  static constexpr std::size_t kMaxReconnectAttempts = 6;
   std::chrono::steady_clock::time_point req_sent_at_{};
 };
 

@@ -39,6 +39,11 @@ void RelayStats::SetStatus(const std::string& relay_url, RelayStatus status, con
   stat.relay_url = relay_url;
   stat.status = status;
   stat.last_error = error;
+  if (status == RelayStatus::kSubscribed) {
+    stat.connected_at = std::chrono::steady_clock::now();
+  } else {
+    stat.connected_at.reset();
+  }
 }
 
 void RelayStats::RecordLatency(const std::string& relay_url, double latency_ms) {

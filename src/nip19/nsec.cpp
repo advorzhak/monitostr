@@ -14,6 +14,8 @@
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include "monitostr/nip19/nsec.hpp"
+
+#include "monitostr/security/secure_memory.hpp"
 #include "bech32_internal.hpp"
 
 namespace monitostr::nip19 {
@@ -21,13 +23,16 @@ namespace monitostr::nip19 {
 NsecDecodeResult DecodeNsecToHex(const std::string& nsec) {
   NsecDecodeResult result;
   std::string error;
-  const auto bytes = internal::DecodeBech32_32Bytes(nsec, "nsec", error);
+  // Fix #5: use a mutable vector so we can zero it after the hex conversion.
+  auto bytes = internal::DecodeBech32_32Bytes(nsec, "nsec", error);
   if (bytes.empty()) {
     result.error = std::move(error);
     return result;
   }
   result.ok = true;
   result.hex_privkey = internal::BytesToHex(bytes);
+  // Fix #5: zero the raw private key bytes now that they are in hex form.
+  monitostr::security::SecureZero(bytes.data(), bytes.size());
   return result;
 }
 

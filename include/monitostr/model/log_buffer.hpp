@@ -32,9 +32,25 @@ enum class LogLevel {
   kError,
 };
 
+// Fix #10: returns a short uppercase tag for a log level, used wherever the
+// level must be rendered as human-readable text (wlogs output, TUI chip, etc.).
+inline const char* ToString(LogLevel level) {
+  switch (level) {
+    case LogLevel::kInfo:
+      return "INFO";
+    case LogLevel::kWarn:
+      return "WARN";
+    case LogLevel::kError:
+      return "ERROR";
+  }
+  return "INFO";
+}
+
 struct LogEntry {
   std::string timestamp;
   LogLevel level = LogLevel::kInfo;
+  // Fix #10: message stores the raw text with no embedded level prefix.
+  // Use the 'level' field for display; ToString(level) for formatted output.
   std::string message;
 };
 
@@ -72,24 +88,14 @@ class LogBuffer {
     return oss.str();
   }
 
-  static const char* LevelTag(LogLevel level) {
-    switch (level) {
-      case LogLevel::kInfo:
-        return "INFO";
-      case LogLevel::kWarn:
-        return "WARN";
-      case LogLevel::kError:
-        return "ERROR";
-    }
-    return "INFO";
-  }
-
+  // Fix #10: message is stored as-is without a level prefix; the level field
+  // on LogEntry carries that information separately.
   void Push(LogLevel level, const std::string& message) {
     std::lock_guard<std::mutex> lock(mutex_);
     entries_.push_back(LogEntry{
         .timestamp = NowString(),
         .level = level,
-        .message = std::string("[") + LevelTag(level) + "] " + message,
+        .message = message,
     });
     while (entries_.size() > max_entries_) {
       entries_.pop_front();

@@ -23,8 +23,9 @@
 
 #include "monitostr/model/log_buffer.hpp"
 #include "monitostr/model/relay_stats.hpp"
-#include "monitostr/ui/command_processor.hpp"
-#include "monitostr/ui/navigation_controller.hpp"
+// Fix #12: include ui_renderer.hpp so RenderMode is available here without
+// duplicating the enum definition.
+#include "monitostr/ui/ui_renderer.hpp"
 
 namespace monitostr::ui {
 
@@ -45,13 +46,6 @@ class App {
   void Run();
 
  private:
-  enum class UiMode {
-    kNormal,
-    kInsert,
-    kSearch,
-    kCommand,
-  };
-
   ftxui::Component BuildComponentTree();
 
   HeaderContext header_context_;
@@ -60,7 +54,8 @@ class App {
   NpubSubmit on_submit_;
   NsecSubmit on_auth_;
   std::string input_npub_;
-  UiMode mode_ = UiMode::kNormal;
+  // Fix #12: use RenderMode directly instead of a parallel App::UiMode enum.
+  RenderMode mode_ = RenderMode::kNormal;
   ActivePane active_pane_ = ActivePane::kRelays;
   std::size_t selected_relay_ = 0;
   std::size_t logs_scroll_lines_ = 0;

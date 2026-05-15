@@ -16,7 +16,10 @@
 #include "monitostr/ui/ui_renderer.hpp"
 
 #include <algorithm>
+#include <cmath>
+
 #include "monitostr/ui/command_processor.hpp"
+
 namespace monitostr::ui {
 namespace {
 
@@ -41,16 +44,6 @@ struct Palette {
 const Palette& UiPalette() {
   static const Palette palette;
   return palette;
-}
-
-std::string StripLevelPrefix(const std::string& message) {
-  if (message.size() > 8 && message[0] == '[') {
-    const std::size_t close = message.find("] ");
-    if (close != std::string::npos) {
-      return message.substr(close + 2);
-    }
-  }
-  return message;
 }
 
 ftxui::Color StatusColor(monitostr::model::RelayStatus status) {
@@ -166,15 +159,21 @@ ftxui::Element RenderLogs(const RenderContext& context, bool focused) {
   Elements lines;
   for (std::size_t i = start; i < context.visible_logs.size() && lines.size() < context.log_lines; ++i) {
     const auto& entry = context.visible_logs[i];
-    const std::string level_label = entry.level == monitostr::model::LogLevel::kInfo
-                                        ? "info"
-                                        : (entry.level == monitostr::model::LogLevel::kWarn ? "warn" : "error");
+    // Fix #10: level is stored in entry.level; entry.message is the raw text.
+    // Use ToString(entry.level) for the chip label and entry.message directly.
+    const std::string level_label = monitostr::model::ToString(entry.level);
+    // convert to lowercase for the visual chip
+    std::string chip_label;
+    chip_label.reserve(level_label.size());
+    for (char c : level_label) {
+      chip_label += static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+    }
     lines.push_back(hbox({
                         text(entry.timestamp) | color(palette.text_muted),
                         text(" "),
-                        RenderChip(level_label, LogLevelColor(entry.level), palette.panel_alt),
+                        RenderChip(chip_label, LogLevelColor(entry.level), palette.panel_alt),
                         text(" "),
-                        text(StripLevelPrefix(entry.message)) | color(palette.text),
+                        text(entry.message) | color(palette.text),
                     }) |
                     bgcolor((i % 2 == 0) ? palette.panel : palette.panel_alt));
   }
@@ -417,6 +416,33 @@ SelectedRelaySummary SummarizeSelectedRelay(const RenderContext& context) {
   const RelayStat* selected_relay = context.relay_stats.empty() || context.selected_relay >= context.relay_stats.size()
                                         ? nullptr
                                         : &context.relay_stats[context.selected_relay];
+  std::string latency_stats = "-";
+  if (selected_relay != nullptr && !selected_relay->latency_history_ms.empty()) {
+    double sum = 0.0;
+    double min_val = selected_relay->latency_history_ms.front();
+    double max_val = selected_relay->latency_history_ms.front();
+    for (double v : selected_relay->latency_history_ms) {
+      sum += v;
+      if (v < min_val) min_val = v;
+      if (v > max_val) max_val = v;
+    }
+    double avg = sum / static_cast<double>(selected_relay->latency_history_ms.size());
+    latency_stats = "avg: " + std::to_string(static_cast<int>(std::round(avg))) +
+                    " min: " + std::to_string(static_cast<int>(std::round(min_val))) +
+                    " max: " + std::to_string(static_cast<int>(std::round(max_val)));
+  }
+  std::string uptime = "-";
+  if (selected_relay != nullptr && selected_relay->connected_at.has_value()) {
+    const auto now = std::chrono::steady_clock::now();
+    const auto elapsed = std::chrono::duration_cast<std::chrono::seconds>(now - *selected_relay->connected_at).count();
+    const auto mins = elapsed / 60;
+    const auto secs = elapsed % 60;
+    if (mins > 0) {
+      uptime = std::to_string(mins) + "m " + std::to_string(secs) + "s";
+    } else {
+      uptime = std::to_string(secs) + "s";
+    }
+  }
   return {
       .relay_summary = selected_relay == nullptr
                            ? "No relay selected"
@@ -425,12 +451,15 @@ SelectedRelaySummary SummarizeSelectedRelay(const RenderContext& context) {
       .relay_latency = (selected_relay != nullptr && selected_relay->latency_ms.has_value())
                            ? (std::to_string(static_cast<int>(*selected_relay->latency_ms)) + " ms")
                            : "waiting",
+      .relay_events = selected_relay == nullptr ? "0" : std::to_string(selected_relay->events_count),
       .relay_nips = selected_relay == nullptr
                         ? "-"
                         : TruncateWithEllipsis(FormatNips(selected_relay->supported_nips), context.compact ? 24 : 40),
       .relay_error = selected_relay == nullptr || selected_relay->last_error.empty()
                          ? "none"
                          : TruncateWithEllipsis(selected_relay->last_error, context.compact ? 44 : 88),
+      .relay_latency_stats = latency_stats,
+      .relay_uptime = uptime,
   };
 }
 
@@ -536,10 +565,17 @@ ftxui::Element RenderApp(const RenderContext& context) {
               text(" "),
               RenderMetricCard("Latency", relay.relay_latency, palette.accent_warm),
               text(" "),
+              RenderMetricCard("Events", relay.relay_events, palette.accent),
+              text(" "),
               RenderMetricCard("NIPs", relay.relay_nips, palette.accent),
           }),
           RenderInfoLine(" relay error: ", relay.relay_error,
                          relay.relay_error == "none" ? palette.text_muted : palette.danger),
+          hbox({
+              RenderInfoLine(" latency stats: ", relay.relay_latency_stats, palette.accent_warm) | flex,
+              text("  "),
+              RenderInfoLine(" uptime: ", relay.relay_uptime, palette.success),
+          }),
           separator(),
           RenderRelayTable(context, relays_focused),
           separator(),

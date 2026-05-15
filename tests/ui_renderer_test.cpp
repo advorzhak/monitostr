@@ -15,6 +15,8 @@
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <chrono>
+
 #include <ftxui/dom/node.hpp>
 #include <ftxui/screen/screen.hpp>
 
@@ -74,6 +76,9 @@ TEST_CASE("SummarizeSelectedRelay surfaces relay details and errors", "[ui][rend
   CHECK(summary.relay_latency == "321 ms");
   CHECK(summary.relay_nips == "1,11,65");
   CHECK(summary.relay_error.find("certificate verify failed") != std::string::npos);
+  CHECK(summary.relay_events == "0");
+  CHECK(summary.relay_latency_stats == "-");
+  CHECK(summary.relay_uptime == "-");
 }
 
 TEST_CASE("SummarizeSelectedRelay returns placeholders when nothing is selected", "[ui][renderer]") {
@@ -84,6 +89,35 @@ TEST_CASE("SummarizeSelectedRelay returns placeholders when nothing is selected"
   CHECK(summary.relay_latency == "waiting");
   CHECK(summary.relay_nips == "-");
   CHECK(summary.relay_error == "none");
+  CHECK(summary.relay_events == "0");
+  CHECK(summary.relay_latency_stats == "-");
+  CHECK(summary.relay_uptime == "-");
+}
+
+TEST_CASE("SummarizeSelectedRelay computes latency stats and uptime", "[ui][renderer]") {
+  auto past_time = std::chrono::steady_clock::now() - std::chrono::seconds(125);
+  RenderContext context{
+      .compact = false,
+      .selected_relay = 0,
+      .relay_stats =
+          {
+              {
+                  .relay_url = "wss://relay.example",
+                  .status = monitostr::model::RelayStatus::kSubscribed,
+                  .latency_ms = 42.0,
+                  .events_count = 150,
+                  .supported_nips = {1, 11},
+                  .latency_history_ms = {30.0, 40.0, 50.0},
+                  .connected_at = past_time,
+              },
+          },
+  };
+
+  const auto summary = SummarizeSelectedRelay(context);
+
+  CHECK(summary.relay_events == "150");
+  CHECK(summary.relay_latency_stats == "avg: 40 min: 30 max: 50");
+  CHECK(summary.relay_uptime.find("2m") != std::string::npos);
 }
 
 TEST_CASE("ComputeRelayListViewport centers the selected relay when possible", "[ui][renderer]") {

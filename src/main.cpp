@@ -59,7 +59,9 @@ int main() {
 
   std::thread io_thread([&io_context] { io_context.run(); });
 
-  // auth_key is set via :auth or nsec input; shared across re-submits.
+  // auth_key is written only on the UI thread; it is read by the bootstrap
+  // completion callback (which runs on the io thread) by value-capturing a
+  // snapshot at the moment start_monitoring is called — eliminating the race.
   std::shared_ptr<const monitostr::nostr::AuthKey> auth_key;
 
   // app_ptr is assigned after construction to allow callbacks to call SetHeaderContext.
@@ -80,15 +82,21 @@ int main() {
     shared_stats->Reset();
     log_buffer->Info("Relay stats reset");
     const std::string hex_pubkey = decode.hex_pubkey;
-    bootstrap.ResolveRelaysForPubkey(hex_pubkey, [&, hex_pubkey](const monitostr::net::BootstrapResult& result) {
-      if (!result.ok) {
-        log_buffer->Error("Bootstrap failed: " + result.error);
-        std::cerr << "Bootstrap failed: " << result.error << std::endl;
-        return;
-      }
-      log_buffer->Info("Bootstrap returned " + std::to_string(result.relay_urls.size()) + " relays");
-      session_manager.Start(result.relay_urls, hex_pubkey, auth_key);
-    });
+
+    // Fix #3: capture auth_key by value here (UI thread) so that the
+    // bootstrap completion callback (io thread) reads from its own copy and
+    // never races with a concurrent NsecSubmit write to auth_key.
+    auto auth_key_snapshot = auth_key;
+    bootstrap.ResolveRelaysForPubkey(
+        hex_pubkey, [&, hex_pubkey, auth_key_snapshot](const monitostr::net::BootstrapResult& result) {
+          if (!result.ok) {
+            log_buffer->Error("Bootstrap failed: " + result.error);
+            std::cerr << "Bootstrap failed: " << result.error << std::endl;
+            return;
+          }
+          log_buffer->Info("Bootstrap returned " + std::to_string(result.relay_urls.size()) + " relays");
+          session_manager.Start(result.relay_urls, hex_pubkey, auth_key_snapshot);
+        });
   };
 
   monitostr::ui::App app(
@@ -133,6 +141,7 @@ int main() {
         start_monitoring(npub_result.npub);
       });
 
+  app_ptr = &app;
   app.SetHeaderContext({.npub = "", .hex_pubkey = ""});
   app.Run();
 

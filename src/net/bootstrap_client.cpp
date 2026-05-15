@@ -266,7 +266,7 @@ BootstrapResult QuerySeedRelay(const std::string& seed_relay_url, const std::str
   }
 
   result.relay_urls = FilterSupportedRelayUrls(std::move(result.relay_urls), log_buffer);
-  if (!result.ok && result.relay_urls.empty()) {
+  if (result.relay_urls.empty()) {
     result.relay_urls = FilterSupportedRelayUrls(
         {
             seed_relay_url,
