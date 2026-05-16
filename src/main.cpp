@@ -45,6 +45,44 @@ void PrintVersion() {
             << "build:     " << (monitostr::kBuildType[0] ? monitostr::kBuildType : "unknown") << "\n";
 }
 
+void PrintHelp() {
+  PrintVersion();
+  std::cout << "\n"
+            << "Usage: monitostr [OPTIONS]\n"
+            << "\n"
+            << "Options:\n"
+            << "  -h, --help     Show this help message and exit\n"
+            << "  -v, -V, --version  Show version info and exit\n"
+            << "\n"
+            << "Normal mode:\n"
+            << "  i              Enter insert mode (type npub or nsec)\n"
+            << "  :              Enter command mode\n"
+            << "  /              Search logs\n"
+            << "  h / l          Switch to Relays / Logs pane\n"
+            << "  f              Toggle log follow mode\n"
+            << "  j / k          Move selection up / down\n"
+            << "  Ctrl-d / d     Page down (5 relays)\n"
+            << "  Ctrl-u / u     Page up (5 relays)\n"
+            << "  gg             Jump to first relay\n"
+            << "  G              Jump to last relay\n"
+            << "  0              Jump to pane start\n"
+            << "  $              Jump to pane end\n"
+            << "  n / N          Navigate search matches (forward / back)\n"
+            << "  Escape         Cancel current mode\n"
+            << "\n"
+            << "Commands (prefixed with :\n"
+            << "  :quit  :exit  :q  :wq       Exit application\n"
+            << "  :follow  :toggle            Toggle log follow\n"
+            << "  :compact  :wide             Toggle layout mode\n"
+            << "  :copylogs  :yanklogs        Copy logs to clipboard\n"
+            << "  :wlogs <path>               Save logs to file\n"
+            << "  :copyrelay  :yankrelay      Copy selected relay URL\n"
+            << "  :relayinfo  :ri             Log selected relay details\n"
+            << "  :auth <nsec>                Set NIP-42 auth key\n"
+            << "  :clearlogs                  Clear log buffer\n"
+            << "\n";
+}
+
 void ConfigureTlsContext(boost::asio::ssl::context& ctx) {
   ctx.set_default_verify_paths();
   ctx.set_verify_mode(boost::asio::ssl::verify_peer);
@@ -55,6 +93,10 @@ void ConfigureTlsContext(boost::asio::ssl::context& ctx) {
 int main(int argc, char* argv[]) {
   for (int i = 1; i < argc; ++i) {
     const std::string arg = argv[i];
+    if (arg == "--help" || arg == "-h") {
+      PrintHelp();
+      return 0;
+    }
     if (arg == "--version" || arg == "-v" || arg == "-V") {
       PrintVersion();
       return 0;
