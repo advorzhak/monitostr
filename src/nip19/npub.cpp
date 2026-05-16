@@ -18,7 +18,7 @@
 
 namespace monitostr::nip19 {
 
-DecodeResult DecodeNpubToHex(const std::string& npub) {
+DecodeResult DecodeNpubToHex(std::string_view npub) {
   DecodeResult result;
   std::string error;
   const auto bytes = internal::DecodeBech32_32Bytes(npub, "npub", error);
@@ -31,7 +31,7 @@ DecodeResult DecodeNpubToHex(const std::string& npub) {
   return result;
 }
 
-EncodeResult EncodeNpubFromHex(const std::string& hex_pubkey) {
+EncodeResult EncodeNpubFromHex(std::string_view hex_pubkey) {
   EncodeResult result;
   const auto bytes = internal::HexToBytes(hex_pubkey);
   if (bytes.size() != 32U) {

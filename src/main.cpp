@@ -64,47 +64,37 @@ int main() {
   // snapshot at the moment start_monitoring is called — eliminating the race.
   std::shared_ptr<const monitostr::nostr::AuthKey> auth_key;
 
-  // app_ptr is assigned after construction to allow callbacks to call SetHeaderContext.
-  monitostr::ui::App* app_ptr = nullptr;
-
-  // start_monitoring: decode npub, update header, bootstrap relays and start sessions.
-  auto start_monitoring = [&](const std::string& npub) {
-    auto decode = monitostr::nip19::DecodeNpubToHex(npub);
-    if (!decode.ok) {
-      log_buffer->Error("Invalid npub: " + decode.error);
-      std::cerr << "Invalid npub: " << decode.error << std::endl;
-      return;
-    }
-    if (app_ptr != nullptr) {
-      app_ptr->SetHeaderContext({.npub = npub, .hex_pubkey = decode.hex_pubkey});
-    }
-    log_buffer->Info("npub decoded successfully");
-    shared_stats->Reset();
-    log_buffer->Info("Relay stats reset");
-    const std::string hex_pubkey = decode.hex_pubkey;
-
-    // Fix #3: capture auth_key by value here (UI thread) so that the
-    // bootstrap completion callback (io thread) reads from its own copy and
-    // never races with a concurrent NsecSubmit write to auth_key.
-    auto auth_key_snapshot = auth_key;
-    bootstrap.ResolveRelaysForPubkey(
-        hex_pubkey, [&, hex_pubkey, auth_key_snapshot](const monitostr::net::BootstrapResult& result) {
-          if (!result.ok) {
-            log_buffer->Error("Bootstrap failed: " + result.error);
-            std::cerr << "Bootstrap failed: " << result.error << std::endl;
-            return;
-          }
-          log_buffer->Info("Bootstrap returned " + std::to_string(result.relay_urls.size()) + " relays");
-          session_manager.Start(result.relay_urls, hex_pubkey, auth_key_snapshot);
-        });
-  };
-
   monitostr::ui::App app(
       shared_stats, log_buffer,
       // NpubSubmit callback
       [&](std::string npub) {
         log_buffer->Info("New npub submitted");
-        start_monitoring(npub);
+        auto decode = monitostr::nip19::DecodeNpubToHex(npub);
+        if (!decode.ok) {
+          log_buffer->Error("Invalid npub: " + decode.error);
+          std::cerr << "Invalid npub: " << decode.error << std::endl;
+          return;
+        }
+        app.SetHeaderContext({.npub = npub, .hex_pubkey = decode.hex_pubkey});
+        log_buffer->Info("npub decoded successfully");
+        shared_stats->Reset();
+        log_buffer->Info("Relay stats reset");
+        const std::string hex_pubkey = decode.hex_pubkey;
+
+        // Fix #3: capture auth_key by value here (UI thread) so that the
+        // bootstrap completion callback (io thread) reads from its own copy and
+        // never races with a concurrent NsecSubmit write to auth_key.
+        auto auth_key_snapshot = auth_key;
+        bootstrap.ResolveRelaysForPubkey(
+            hex_pubkey, [&, hex_pubkey, auth_key_snapshot](const monitostr::net::BootstrapResult& result) {
+              if (!result.ok) {
+                log_buffer->Error("Bootstrap failed: " + result.error);
+                std::cerr << "Bootstrap failed: " << result.error << std::endl;
+                return;
+              }
+              log_buffer->Info("Bootstrap returned " + std::to_string(result.relay_urls.size()) + " relays");
+              session_manager.Start(result.relay_urls, hex_pubkey, auth_key_snapshot);
+            });
       },
       // NsecSubmit callback (:auth nsec1... or nsec entered in Insert mode)
       [&](std::string nsec) {
@@ -138,14 +128,34 @@ int main() {
           return;
         }
         log_buffer->Info("npub derived from nsec, starting monitoring");
-        start_monitoring(npub_result.npub);
+        auto npub_decode = monitostr::nip19::DecodeNpubToHex(npub_result.npub);
+        if (!npub_decode.ok) {
+          log_buffer->Error("Invalid npub from nsec: " + npub_decode.error);
+          return;
+        }
+        app.SetHeaderContext({.npub = npub_result.npub, .hex_pubkey = npub_decode.hex_pubkey});
+        shared_stats->Reset();
+        log_buffer->Info("Relay stats reset");
+        const std::string hex_pubkey = npub_decode.hex_pubkey;
+        auto auth_key_snapshot = auth_key;
+        bootstrap.ResolveRelaysForPubkey(
+            hex_pubkey, [&, hex_pubkey, auth_key_snapshot](const monitostr::net::BootstrapResult& result) {
+              if (!result.ok) {
+                log_buffer->Error("Bootstrap failed: " + result.error);
+                std::cerr << "Bootstrap failed: " << result.error << std::endl;
+                return;
+              }
+              log_buffer->Info("Bootstrap returned " + std::to_string(result.relay_urls.size()) + " relays");
+              session_manager.Start(result.relay_urls, hex_pubkey, auth_key_snapshot);
+            });
       });
 
-  app_ptr = &app;
   app.SetHeaderContext({.npub = "", .hex_pubkey = ""});
   app.Run();
 
   session_manager.StopAll();
+  session_manager.Shutdown();
+  bootstrap.Shutdown();
   log_buffer->Info("Application stopping");
   work_guard.reset();
   io_context.stop();

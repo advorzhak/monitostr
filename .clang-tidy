@@ -1,0 +1,14 @@
+---
+Checks: '-*,bugprone-*,clang-analyzer-*,cppcoreguidelines-*,misc-*,modernize-*,performance-*,readability-*'
+WarningsAsErrors: ''
+HeaderFilterRegex: ''
+AnalyzeTemporaryDtors: false
+CheckOptions:
+  - key: cppcoreguidelines-owning-memory.LegacyResourceConsumers
+    value: '::free;::fclose'
+  - key: cppcoreguidelines-owning-memory.LegacyResourceProducers
+    value: '::malloc;::aligned_alloc;::realloc;::calloc;::fopen'
+  - key: modernize-use-auto-min-iterations
+    value: '0'
+  - key: readability-identifier-naming.IgnoreFailedCase
+    value: 'true'

@@ -56,7 +56,7 @@ inline std::uint32_t Polymod(const std::vector<std::uint8_t>& values) {
   return chk;
 }
 
-inline std::vector<std::uint8_t> HrpExpand(const std::string& hrp) {
+inline std::vector<std::uint8_t> HrpExpand(std::string_view hrp) {
   std::vector<std::uint8_t> out;
   out.reserve(hrp.size() * 2U + 1U);
   for (const char c : hrp) {
@@ -69,7 +69,7 @@ inline std::vector<std::uint8_t> HrpExpand(const std::string& hrp) {
   return out;
 }
 
-inline bool VerifyChecksum(const std::string& hrp, const std::vector<std::uint8_t>& data) {
+inline bool VerifyChecksum(std::string_view hrp, const std::vector<std::uint8_t>& data) {
   std::vector<std::uint8_t> values = HrpExpand(hrp);
   values.insert(values.end(), data.begin(), data.end());
   return Polymod(values) == 1U;
@@ -120,10 +120,10 @@ inline std::string BytesToHex(const std::vector<std::uint8_t>& bytes) {
 // On failure, returns empty vector and sets error_out.
 // The caller is responsible for zeroing the returned vector when it contains
 // sensitive material (e.g. a private key decoded from nsec).
-inline std::vector<std::uint8_t> DecodeBech32_32Bytes(const std::string& input, const std::string& expected_hrp,
+inline std::vector<std::uint8_t> DecodeBech32_32Bytes(std::string_view input, std::string_view expected_hrp,
                                                       std::string& error_out) {
   if (input.empty()) {
-    error_out = expected_hrp + " is empty";
+    error_out = std::string(expected_hrp) + " is empty";
     return {};
   }
 
@@ -138,7 +138,7 @@ inline std::vector<std::uint8_t> DecodeBech32_32Bytes(const std::string& input, 
     return {};
   }
 
-  std::string normalized = input;
+  std::string normalized(input);
   for (char& c : normalized) {
     c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
   }
@@ -151,7 +151,7 @@ inline std::vector<std::uint8_t> DecodeBech32_32Bytes(const std::string& input, 
 
   const std::string hrp = normalized.substr(0, sep);
   if (hrp != expected_hrp) {
-    error_out = "hrp is not " + expected_hrp;
+    error_out = "hrp is not " + std::string(expected_hrp);
     return {};
   }
 
@@ -186,7 +186,7 @@ inline std::vector<std::uint8_t> DecodeBech32_32Bytes(const std::string& input, 
 
   if (bytes.size() != 32U) {
     OPENSSL_cleanse(bytes.data(), bytes.size());
-    error_out = expected_hrp + " payload is not 32 bytes";
+    error_out = std::string(expected_hrp) + " payload is not 32 bytes";
     return {};
   }
 
@@ -195,7 +195,7 @@ inline std::vector<std::uint8_t> DecodeBech32_32Bytes(const std::string& input, 
 
 // Decodes a hex string into raw bytes.
 // Returns empty vector if input is malformed.
-inline std::vector<std::uint8_t> HexToBytes(const std::string& hex) {
+inline std::vector<std::uint8_t> HexToBytes(std::string_view hex) {
   if (hex.size() % 2 != 0) return {};
   std::vector<std::uint8_t> out;
   out.reserve(hex.size() / 2);
@@ -215,7 +215,7 @@ inline std::vector<std::uint8_t> HexToBytes(const std::string& hex) {
 }
 
 // Computes a 6-symbol bech32 checksum for hrp + data.
-inline std::vector<std::uint8_t> CreateChecksum(const std::string& hrp, const std::vector<std::uint8_t>& data) {
+inline std::vector<std::uint8_t> CreateChecksum(std::string_view hrp, const std::vector<std::uint8_t>& data) {
   std::vector<std::uint8_t> values = HrpExpand(hrp);
   values.insert(values.end(), data.begin(), data.end());
   for (int i = 0; i < 6; ++i) values.push_back(0);
@@ -230,7 +230,7 @@ inline std::vector<std::uint8_t> CreateChecksum(const std::string& hrp, const st
 
 // Encodes exactly 32 raw bytes as a bech32 string with the given HRP.
 // Returns empty string on failure.
-inline std::string EncodeBech32_32Bytes(const std::string& hrp, const std::vector<std::uint8_t>& bytes_32) {
+inline std::string EncodeBech32_32Bytes(std::string_view hrp, const std::vector<std::uint8_t>& bytes_32) {
   if (bytes_32.size() != 32U) return {};
   std::vector<std::uint8_t> data5;
   data5.reserve(53);

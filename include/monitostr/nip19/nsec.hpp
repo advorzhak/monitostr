@@ -16,6 +16,7 @@
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include <string>
+#include <string_view>
 
 namespace monitostr::nip19 {
 
@@ -25,6 +26,6 @@ struct NsecDecodeResult {
   std::string error;
 };
 
-NsecDecodeResult DecodeNsecToHex(const std::string& nsec);
+[[nodiscard]] NsecDecodeResult DecodeNsecToHex(std::string_view nsec);
 
 }  // namespace monitostr::nip19

@@ -45,6 +45,8 @@ class BootstrapClient {
   void ResolveRelaysForPubkey(const std::string& hex_pubkey, Completion completion,
                               const std::string& seed_relay_url = "wss://relay.damus.io");
 
+  void Shutdown();
+
  private:
   boost::asio::io_context& io_context_;
   boost::asio::thread_pool worker_pool_{1};

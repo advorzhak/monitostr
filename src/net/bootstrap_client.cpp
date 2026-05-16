@@ -345,4 +345,9 @@ void BootstrapClient::ResolveRelaysForPubkey(const std::string& hex_pubkey, Comp
   });
 }
 
+void BootstrapClient::Shutdown() {
+  worker_pool_.stop();
+  worker_pool_.join();
+}
+
 }  // namespace monitostr::net

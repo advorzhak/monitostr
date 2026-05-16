@@ -23,15 +23,15 @@ namespace monitostr::nostr {
 
 class AuthKey {
  public:
-  static std::shared_ptr<AuthKey> FromHexPrivkey(std::string hex_privkey);
+  [[nodiscard]] static std::shared_ptr<AuthKey> FromHexPrivkey(std::string hex_privkey);
 
   AuthKey(const AuthKey&) = delete;
   AuthKey& operator=(const AuthKey&) = delete;
 
   ~AuthKey();
 
-  const std::array<unsigned char, 32>& privkey_bytes() const { return privkey_bytes_; }
-  const std::string& hex_pubkey() const { return hex_pubkey_; }
+  [[nodiscard]] const std::array<unsigned char, 32>& privkey_bytes() const { return privkey_bytes_; }
+  [[nodiscard]] const std::string& hex_pubkey() const { return hex_pubkey_; }
 
  private:
   AuthKey(std::array<unsigned char, 32> privkey_bytes, std::string hex_pubkey);

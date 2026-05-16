@@ -34,18 +34,19 @@ class SessionManager {
  public:
   SessionManager(boost::asio::io_context& io_context, boost::asio::ssl::context& ssl_context,
                  std::shared_ptr<monitostr::model::RelayStats> shared_stats,
-                 std::shared_ptr<monitostr::model::LogBuffer> log_buffer);
+                 std::shared_ptr<monitostr::model::LogBuffer> log_buffer, std::size_t background_threads = 2);
 
   void Start(const std::vector<std::string>& relay_urls, const std::string& hex_pubkey,
              std::shared_ptr<const monitostr::nostr::AuthKey> auth_key = nullptr);
   void UpdateAuthKey(std::shared_ptr<const monitostr::nostr::AuthKey> auth_key);
   bool HasActiveSessions() const;
   void StopAll();
+  void Shutdown();
 
  private:
   boost::asio::io_context& io_context_;
   boost::asio::ssl::context& ssl_context_;
-  boost::asio::thread_pool background_pool_{2};
+  boost::asio::thread_pool background_pool_;
   std::shared_ptr<monitostr::model::RelayStats> shared_stats_;
   std::shared_ptr<monitostr::model::LogBuffer> log_buffer_;
   std::vector<std::shared_ptr<RelaySession>> sessions_;

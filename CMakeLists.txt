@@ -3,10 +3,19 @@ project(monitostr VERSION 0.1.0 LANGUAGES CXX)
 
 include(CTest)
 
+option(MONITOSTR_ENABLE_SANITIZERS "Enable AddressSanitizer, ThreadSanitizer, and UndefinedBehaviorSanitizer" OFF)
+
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 
 include(CompilerSettings)
 include(Dependencies)
+
+if(MONITOSTR_ENABLE_SANITIZERS)
+  set(SANITIZER_FLAGS "-fsanitize=address,undefined -fno-omit-frame-pointer")
+  add_compile_options(${SANITIZER_FLAGS})
+  add_link_options(${SANITIZER_FLAGS})
+  message(STATUS "Sanitizers enabled: address, undefined")
+endif()
 
 # Fix #16: all shared sources compile once into a static library that both
 # the main executable and the test binary link against, eliminating duplication

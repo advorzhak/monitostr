@@ -17,6 +17,7 @@
 
 #include <optional>
 #include <string>
+#include <string_view>
 
 namespace monitostr::nip19 {
 
@@ -26,7 +27,7 @@ struct DecodeResult {
   std::string error;
 };
 
-DecodeResult DecodeNpubToHex(const std::string& npub);
+[[nodiscard]] DecodeResult DecodeNpubToHex(std::string_view npub);
 
 struct EncodeResult {
   bool ok = false;
@@ -34,6 +35,6 @@ struct EncodeResult {
   std::string error;
 };
 
-EncodeResult EncodeNpubFromHex(const std::string& hex_pubkey);
+[[nodiscard]] EncodeResult EncodeNpubFromHex(std::string_view hex_pubkey);
 
 }  // namespace monitostr::nip19

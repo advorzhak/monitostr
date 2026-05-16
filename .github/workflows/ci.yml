@@ -25,3 +25,27 @@ jobs:
 
       - name: Test
         run: ctest --test-dir build --output-on-failure
+
+  linux-build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake g++ libboost-all-dev libssl-dev nlohmann-json3-dev libsecp256k1-dev
+
+      - name: Install FTXUI
+        run: |
+          git clone https://github.com/ArthurSonzogni/FTXUI.git /tmp/ftxui
+          cmake -S /tmp/ftxui -B /tmp/ftxui/build -DCMAKE_BUILD_TYPE=Release -DFTXUI_ENABLE_INSTALL=ON
+          sudo cmake --build /tmp/ftxui/build --target install
+
+      - name: Configure
+        run: cmake -S . -B build -DMONITOSTR_ENABLE_SANITIZERS=OFF
+
+      - name: Build
+        run: cmake --build build -j4

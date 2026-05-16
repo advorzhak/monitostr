@@ -20,7 +20,7 @@
 
 namespace monitostr::nip19 {
 
-NsecDecodeResult DecodeNsecToHex(const std::string& nsec) {
+NsecDecodeResult DecodeNsecToHex(std::string_view nsec) {
   NsecDecodeResult result;
   std::string error;
   // Fix #5: use a mutable vector so we can zero it after the hex conversion.

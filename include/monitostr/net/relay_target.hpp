@@ -33,7 +33,7 @@ struct ParsedRelayUrl {
   std::string target;
 };
 
-RelayHostTarget SplitRelayHostAndTarget(std::string_view relay);
-std::optional<ParsedRelayUrl> ParseRelayUrl(std::string_view relay_url);
+[[nodiscard]] RelayHostTarget SplitRelayHostAndTarget(std::string_view relay);
+[[nodiscard]] std::optional<ParsedRelayUrl> ParseRelayUrl(std::string_view relay_url);
 
 }  // namespace monitostr::net

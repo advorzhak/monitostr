@@ -39,6 +39,8 @@ namespace {
 using monitostr::ToLowerCopy;
 using monitostr::TrimCopy;
 
+constexpr std::size_t kMaxInputLength = 512;
+
 bool LooksLikeNsecInput(std::string_view value) {
   static constexpr std::string_view kPrefix = "nsec1";
   if (value.size() < kPrefix.size()) return false;
@@ -216,7 +218,9 @@ ftxui::Component App::BuildComponentTree() {
         return true;
       }
       if (event.is_character()) {
-        command_line_ += event.character();
+        if (command_line_.size() < kMaxInputLength) {
+          command_line_ += event.character();
+        }
         return true;
       }
       return false;
@@ -263,7 +267,9 @@ ftxui::Component App::BuildComponentTree() {
         return true;
       }
       if (event.is_character()) {
-        navigation_state.logs_search_query += event.character();
+        if (navigation_state.logs_search_query.size() < kMaxInputLength) {
+          navigation_state.logs_search_query += event.character();
+        }
         apply_navigation_state();
         return true;
       }
@@ -298,7 +304,9 @@ ftxui::Component App::BuildComponentTree() {
         return true;
       }
       if (event.is_character()) {
-        input_npub_ += event.character();
+        if (input_npub_.size() < kMaxInputLength) {
+          input_npub_ += event.character();
+        }
         return true;
       }
       return false;

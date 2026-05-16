@@ -19,9 +19,10 @@ namespace monitostr::net {
 
 SessionManager::SessionManager(boost::asio::io_context& io_context, boost::asio::ssl::context& ssl_context,
                                std::shared_ptr<monitostr::model::RelayStats> shared_stats,
-                               std::shared_ptr<monitostr::model::LogBuffer> log_buffer)
+                               std::shared_ptr<monitostr::model::LogBuffer> log_buffer, std::size_t background_threads)
     : io_context_(io_context),
       ssl_context_(ssl_context),
+      background_pool_(background_threads),
       shared_stats_(std::move(shared_stats)),
       log_buffer_(std::move(log_buffer)) {}
 
@@ -63,6 +64,11 @@ void SessionManager::StopAll() {
   // async handlers keep them alive until those handlers complete. The io_context
   // must continue running for sessions to fully terminate.
   sessions_.clear();
+}
+
+void SessionManager::Shutdown() {
+  background_pool_.stop();
+  background_pool_.join();
 }
 
 }  // namespace monitostr::net
