@@ -20,6 +20,7 @@
 #include <functional>
 #include <memory>
 #include <string>
+#include <string_view>
 
 #include "monitostr/model/log_buffer.hpp"
 #include "monitostr/model/relay_stats.hpp"
@@ -36,8 +37,8 @@ class App {
     std::string hex_pubkey;
   };
 
-  using NpubSubmit = std::function<void(std::string npub)>;
-  using NsecSubmit = std::function<void(std::string nsec)>;
+  using NpubSubmit = std::function<void(std::string_view npub)>;
+  using NsecSubmit = std::function<void(std::string_view nsec)>;
 
   App(std::shared_ptr<monitostr::model::RelayStats> shared_stats,
       std::shared_ptr<monitostr::model::LogBuffer> log_buffer, NpubSubmit on_submit, NsecSubmit on_auth = nullptr);

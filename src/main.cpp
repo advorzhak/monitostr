@@ -67,7 +67,7 @@ int main() {
   monitostr::ui::App app(
       shared_stats, log_buffer,
       // NpubSubmit callback
-      [&](std::string npub) {
+      [&](std::string_view npub) {
         log_buffer->Info("New npub submitted");
         auto decode = monitostr::nip19::DecodeNpubToHex(npub);
         if (!decode.ok) {
@@ -75,7 +75,7 @@ int main() {
           std::cerr << "Invalid npub: " << decode.error << std::endl;
           return;
         }
-        app.SetHeaderContext({.npub = npub, .hex_pubkey = decode.hex_pubkey});
+        app.SetHeaderContext({.npub = std::string(npub), .hex_pubkey = decode.hex_pubkey});
         log_buffer->Info("npub decoded successfully");
         shared_stats->Reset();
         log_buffer->Info("Relay stats reset");
@@ -97,9 +97,8 @@ int main() {
             });
       },
       // NsecSubmit callback (:auth nsec1... or nsec entered in Insert mode)
-      [&](std::string nsec) {
+      [&](std::string_view nsec) {
         auto decode = monitostr::nip19::DecodeNsecToHex(nsec);
-        monitostr::security::SecureClearString(nsec);
         if (!decode.ok) {
           log_buffer->Error("Invalid nsec: " + decode.error);
           return;

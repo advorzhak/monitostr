@@ -288,11 +288,12 @@ ftxui::Component App::BuildComponentTree() {
         monitostr::security::SecureClearString(input_npub_);
         if (!submitted_input.empty()) {
           if (LooksLikeNsecInput(submitted_input) && on_auth_) {
-            on_auth_(std::move(submitted_input));
+            on_auth_(submitted_input);
           } else {
-            on_submit_(std::move(submitted_input));
+            on_submit_(submitted_input);
           }
         }
+        monitostr::security::SecureClearString(submitted_input);
         mode_ = RenderMode::kNormal;
         pending_g_ = false;
         return true;
