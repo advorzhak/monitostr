@@ -33,8 +33,17 @@
 #include "monitostr/nostr/signer.hpp"
 #include "monitostr/security/secure_memory.hpp"
 #include "monitostr/ui/app.hpp"
+#include "monitostr/version.hpp"
 
 namespace {
+
+void PrintVersion() {
+  std::cout << "monitostr " << monitostr::kVersion << "\n"
+            << "commit:    " << monitostr::kGitHash << "\n"
+            << "built:     " << monitostr::kBuildDate << " UTC\n"
+            << "compiler:  " << monitostr::kCompilerId << " " << monitostr::kCompilerVersion << "\n"
+            << "build:     " << (monitostr::kBuildType[0] ? monitostr::kBuildType : "unknown") << "\n";
+}
 
 void ConfigureTlsContext(boost::asio::ssl::context& ctx) {
   ctx.set_default_verify_paths();
@@ -43,7 +52,14 @@ void ConfigureTlsContext(boost::asio::ssl::context& ctx) {
 
 }  // namespace
 
-int main() {
+int main(int argc, char* argv[]) {
+  for (int i = 1; i < argc; ++i) {
+    const std::string arg = argv[i];
+    if (arg == "--version" || arg == "-v" || arg == "-V") {
+      PrintVersion();
+      return 0;
+    }
+  }
   boost::asio::io_context io_context;
   auto work_guard = boost::asio::make_work_guard(io_context);
   boost::asio::ssl::context ssl_context(boost::asio::ssl::context::tls_client);

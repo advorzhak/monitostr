@@ -17,6 +17,34 @@ if(MONITOSTR_ENABLE_SANITIZERS)
   message(STATUS "Sanitizers enabled: address, undefined")
 endif()
 
+# Generate version info from git and build configuration
+find_package(Git QUIET)
+if(GIT_FOUND)
+  execute_process(
+    COMMAND ${GIT_EXECUTABLE} rev-parse --short HEAD
+    WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    OUTPUT_VARIABLE MONITOSTR_GIT_HASH
+    OUTPUT_STRIP_TRAILING_WHITESPACE
+    ERROR_QUIET
+  )
+  if(NOT MONITOSTR_GIT_HASH)
+    set(MONITOSTR_GIT_HASH "unknown")
+  endif()
+else()
+  set(MONITOSTR_GIT_HASH "unknown")
+endif()
+
+string(TIMESTAMP MONITOSTR_BUILD_DATE "%Y-%m-%d %H:%M:%S" UTC)
+set(MONITOSTR_COMPILER_ID "${CMAKE_CXX_COMPILER_ID}")
+set(MONITOSTR_COMPILER_VERSION "${CMAKE_CXX_COMPILER_VERSION}")
+set(MONITOSTR_BUILD_TYPE "${CMAKE_BUILD_TYPE}")
+
+configure_file(
+  "${CMAKE_CURRENT_SOURCE_DIR}/include/monitostr/version.hpp.in"
+  "${CMAKE_CURRENT_BINARY_DIR}/generated/monitostr/version.hpp"
+  @ONLY
+)
+
 # Fix #16: all shared sources compile once into a static library that both
 # the main executable and the test binary link against, eliminating duplication
 # and build-time drift when new source files are added.
@@ -38,6 +66,7 @@ add_library(monitostr_core STATIC
 
 target_include_directories(monitostr_core
   PUBLIC "${PROJECT_SOURCE_DIR}/include"
+  PUBLIC "${CMAKE_CURRENT_BINARY_DIR}/generated"
 )
 
 target_link_libraries(monitostr_core
