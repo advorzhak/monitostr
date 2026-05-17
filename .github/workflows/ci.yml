@@ -36,7 +36,7 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y cmake g++ libboost-all-dev libssl-dev nlohmann-json3-dev libsecp256k1-dev
+          sudo apt-get install -y cmake g++ libboost-all-dev libssl-dev nlohmann-json3-dev libsecp256k1-dev catch2
 
       - name: Install FTXUI
         run: |
